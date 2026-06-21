@@ -1,7 +1,8 @@
 [build]
-  functions = "functions"
+  publish = "."
 
 [functions]
-  "monitor" = {
-    schedule = "*/10 * * * *"
-  }
+  node_bundler = "esbuild"
+
+[functions."monitor"]
+  schedule = "*/10 * * * *"
