@@ -5,6 +5,7 @@ const X_API = {
   accessToken: '2068024413526568960-Zfs9cO1BUqrfrqaBH3sSewAatdJcGo',
   accessSecret: 'YNInpubUxHhcNygbQZ8qkl7k7Tow0JkhzOIpP4GeInMyC'
 };
+};
 
 const JHB_WATER_ID = '1083561126260609024';
 
