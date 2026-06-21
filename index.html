@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a73e8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Amanzi Watch - Joburg Water Tracker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a73e8'/><text y='70' font-size='60' text-anchor='middle' x='50'>💧</text></svg>">
+    
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+     crossorigin="anonymous"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5; height: 100vh; height: 100dvh;
+            display: flex; flex-direction: column; overscroll-behavior: none;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a73e8, #0d47a1);
+            color: white; padding: 10px 16px; display: flex;
+            align-items: center; justify-content: space-between;
+            z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+        .header h1 { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+        .header h1 span { font-size: 20px; }
+        .header-actions { display: flex; gap: 6px; align-items: center; }
+        .icon-btn {
+            background: rgba(255,255,255,0.2); border: none; color: white;
+            width: 32px; height: 32px; border-radius: 50%; font-size: 16px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .stats-badge {
+            background: rgba(255,255,255,0.2); padding: 5px 10px;
+            border-radius: 15px; font-size: 11px; font-weight: 600;
+            display: flex; align-items: center; gap: 4px;
+        }
+        .live-dot-small { width: 6px; height: 6px; background: #4caf50; border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .search-container {
+            position: absolute; top: 10px; left: 10px; right: 10px;
+            z-index: 1000; max-width: 500px; margin: 0 auto;
+        }
+        .search-box {
+            width: 100%; padding: 11px 14px; border: none;
+            border-radius: 25px; font-size: 13px; font-family: inherit;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); outline: none;
+            padding-left: 38px;
+        }
+        .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 15px; z-index: 1; }
+        .search-results {
+            background: white; border-radius: 12px; margin-top: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 200px;
+            overflow-y: auto; display: none;
+        }
+        .search-results.show { display: block; }
+        .search-result-item {
+            padding: 11px 14px; border-bottom: 1px solid #f0f0f0;
+            cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 8px;
+        }
+        .search-result-item:active { background: #e3f2fd; }
+        .admob-banner-container {
+            width: 100%; min-height: 50px; background: #fff;
+            display: flex; align-items: center; justify-content: center;
+            border-bottom: 1px solid #e0e0e0; overflow: hidden;
+        }
+        .map-container { flex: 1; position: relative; z-index: 1; }
+        #map { height: 100%; width: 100%; }
+        .selected-marker {
+            background: #ff6f00; border: 4px solid white;
+            border-radius: 50%; width: 20px; height: 20px;
+            box-shadow: 0 0 15px rgba(255,111,0,0.7);
+            animation: pulse-orange 1s infinite;
+        }
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(255,111,0,0.7); }
+            70% { box-shadow: 0 0 0 20px rgba(255,111,0,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,111,0,0); }
+        }
+        .user-location-marker { animation: pulse-blue 2s infinite; }
+        @keyframes pulse-blue {
+            0% { box-shadow: 0 0 0 0 rgba(26,115,232,0.6); }
+            70% { box-shadow: 0 0 0 20px rgba(26,115,232,0); }
+            100% { box-shadow: 0 0 0 0 rgba(26,115,232,0); }
+        }
+        .water-marker-active {
+            background: #4caf50; border: 3px solid white;
+            border-radius: 50%; width: 16px; height: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4); animation: ripple-green 1.5s infinite;
+        }
+        .water-marker-inactive {
+            background: #f44336; border: 3px solid white;
+            border-radius: 50%; width: 16px; height: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        .water-marker-info {
+            background: #ff9800; border: 3px solid white;
+            border-radius: 50%; width: 16px; height: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+        @keyframes ripple-green {
+            0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.5); }
+            70% { box-shadow: 0 0 0 18px rgba(76,175,80,0); }
+            100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); }
+        }
+        .map-buttons {
+            position: absolute; bottom: 20px; right: 12px; z-index: 1000;
+            display: flex; flex-direction: column; gap: 6px;
+        }
+        .map-btn {
+            background: white; color: #333; border: none;
+            padding: 10px 14px; border-radius: 25px; font-weight: 700;
+            font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            cursor: pointer; display: flex; align-items: center; gap: 5px;
+        }
+        .map-btn.primary { background: #ff6f00; color: white; }
+        .map-btn.active { background: #1a73e8; color: white; animation: pulse-btn 1s infinite; }
+        @keyframes pulse-btn { 50% { box-shadow: 0 0 20px rgba(26,115,232,0.6); } }
+        .bottom-panel {
+            background: white; border-top: 1px solid #e0e0e0;
+            padding: 10px 14px 14px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+            z-index: 1000; max-height: 40vh; overflow-y: auto;
+        }
+        .quick-actions { display: flex; gap: 6px; margin-bottom: 10px; }
+        .action-btn {
+            flex: 1; padding: 10px 4px; border: none; border-radius: 10px;
+            font-weight: 700; font-size: 11px; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center;
+            gap: 3px; color: white;
+        }
+        .action-btn:active { transform: scale(0.95); }
+        .btn-report { background: #4caf50; }
+        .btn-inactive { background: #f44336; }
+        .btn-nearby { background: #ff9800; }
+        .btn-share { background: #25D366; }
+        .action-btn .icon { font-size: 20px; }
+        .feed-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+        .feed-title { font-size: 13px; font-weight: 700; color: #333; display: flex; align-items: center; gap: 5px; }
+        .feed-count { font-size: 11px; color: #666; background: #f0f0f0; padding: 3px 8px; border-radius: 10px; }
+        .report-card {
+            background: #f8f9fa; border-radius: 10px; padding: 10px;
+            margin-bottom: 6px; border-left: 4px solid #2196F3;
+            font-size: 12px; position: relative;
+        }
+        .report-card .report-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+        .report-card .location { font-weight: 700; color: #1a73e8; font-size: 12px; }
+        .report-card .time { font-size: 10px; color: #999; }
+        .report-card .description { margin: 3px 0; font-size: 11px; color: #666; }
+        .report-card .report-photo {
+            width: 100%; max-height: 150px; object-fit: cover;
+            border-radius: 8px; margin-top: 6px; cursor: pointer;
+        }
+        .report-card .status-tag {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 10px; font-weight: 600; margin-top: 3px;
+        }
+        .status-active { background: #e8f5e9; color: #2e7d32; }
+        .status-inactive { background: #ffebee; color: #c62828; }
+        .status-info { background: #fff3e0; color: #e65100; }
+        .share-card-btn {
+            position: absolute; right: 6px; bottom: 6px;
+            background: #25D366; color: white; border: none;
+            width: 26px; height: 26px; border-radius: 50%;
+            font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .delete-card-btn {
+            position: absolute; right: 36px; bottom: 6px;
+            background: #f44336; color: white; border: none;
+            width: 26px; height: 26px; border-radius: 50%;
+            font-size: 12px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .photo-upload-area {
+            border: 2px dashed #ccc; border-radius: 12px;
+            padding: 20px; text-align: center; cursor: pointer;
+            margin-bottom: 12px; transition: all 0.2s;
+            background: #fafafa;
+        }
+        .photo-upload-area:active { background: #e3f2fd; border-color: #1a73e8; }
+        .photo-upload-area.has-photo { border-color: #4caf50; background: #f1f8e9; }
+        .photo-preview {
+            width: 100%; max-height: 200px; object-fit: cover;
+            border-radius: 8px; margin-top: 8px; display: none;
+        }
+        .photo-preview.show { display: block; }
+        .remove-photo-btn {
+            background: #f44336; color: white; border: none;
+            padding: 6px 12px; border-radius: 15px; font-size: 11px;
+            font-weight: 600; cursor: pointer; margin-top: 8px;
+        }
+        .upload-progress {
+            width: 100%; height: 4px; background: #e0e0e0;
+            border-radius: 2px; margin-top: 8px; display: none;
+        }
+        .upload-progress.show { display: block; }
+        .upload-progress-bar {
+            height: 100%; background: #4caf50; border-radius: 2px;
+            width: 0%; transition: width 0.3s;
+        }
+        .admob-banner-bottom {
+            width: 100%; min-height: 50px; background: #f5f5f5;
+            display: flex; align-items: center; justify-content: center;
+            padding: 6px 0; border-top: 1px solid #e0e0e0; overflow: hidden;
+        }
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7); z-index: 2000;
+            align-items: flex-end; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-sheet {
+            background: white; width: 100%; max-width: 500px;
+            border-radius: 20px 20px 0 0; padding: 20px 18px 28px;
+            animation: slideUp 0.3s ease; max-height: 85vh; overflow-y: auto;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-sheet h3 { margin-bottom: 14px; font-size: 16px; }
+        .modal-sheet label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 3px; }
+        .modal-sheet input, .modal-sheet select, .modal-sheet textarea {
+            width: 100%; padding: 10px; border: 2px solid #e0e0e0;
+            border-radius: 10px; font-size: 13px; margin-bottom: 10px; font-family: inherit;
+        }
+        .modal-sheet textarea { height: 70px; resize: none; }
+        .modal-actions { display: flex; gap: 8px; }
+        .modal-actions button {
+            flex: 1; padding: 12px; border: none; border-radius: 10px;
+            font-weight: 700; font-size: 13px; cursor: pointer;
+        }
+        .btn-cancel { background: #f5f5f5; color: #666; }
+        .btn-submit { background: #1a73e8; color: white; }
+        .toast {
+            position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+            background: #333; color: white; padding: 10px 20px; border-radius: 25px;
+            font-size: 13px; font-weight: 600; z-index: 4000;
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards;
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
+        .coord-display {
+            background: #f0f7ff; padding: 6px 10px; border-radius: 8px;
+            font-size: 11px; color: #1a73e8; text-align: center; margin-bottom: 8px;
+            display: none;
+        }
+        .stats-footer {
+            display: flex; justify-content: center; gap: 16px;
+            padding: 8px; background: #fafafa; border-top: 1px solid #eee;
+            font-size: 11px; color: #888;
+        }
+        .stats-footer span { display: flex; align-items: center; gap: 4px; }
+        .disclaimer {
+            text-align: center; font-size: 9px; color: #bbb; padding: 6px; background: #fafafa;
+        }
+        .photo-badge {
+            display: inline-block; background: #ff9800; color: white;
+            padding: 1px 6px; border-radius: 8px; font-size: 9px;
+            font-weight: 700; margin-left: 4px;
+        }
+        @media (min-width: 768px) {
+            .quick-actions, .feed-header, .report-card { max-width: 500px; margin-left: auto; margin-right: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><span>💧</span> Amanzi Watch</h1>
+        <div class="header-actions">
+            <button class="icon-btn" onclick="shareApp()">📤</button>
+            <div class="stats-badge">
+                <span class="live-dot-small"></span> <span id="onlineCount">...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="admob-banner-container">
+        <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="1234567890" data-ad-format="auto" data-full-width-responsive="true"></ins>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+        
+        <div class="search-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-box" id="searchBox" placeholder="Search area... e.g. Orange Farm, Soweto" autocomplete="off">
+            <div class="search-results" id="searchResults"></div>
+        </div>
+
+        <div class="map-buttons">
+            <button class="map-btn primary" id="tapPinBtn" onclick="toggleTapMode()">📍 Pin Location</button>
+            <button class="map-btn" onclick="shareNearbyWater()">📤 Share</button>
+        </div>
+    </div>
+
+    <div class="bottom-panel">
+        <div class="quick-actions">
+            <button class="action-btn btn-report" onclick="openReportModal('active')"><span class="icon">💧</span>Water Here</button>
+            <button class="action-btn btn-inactive" onclick="openReportModal('inactive')"><span class="icon">🚫</span>Dry Area</button>
+            <button class="action-btn btn-nearby" onclick="findNearby()"><span class="icon">📍</span>Near Me</button>
+            <button class="action-btn btn-share" onclick="shareApp()"><span class="icon">📤</span>Share</button>
+        </div>
+
+        <div class="feed-header">
+            <div class="feed-title"><span class="live-dot" style="width:7px;height:7px;"></span> Live Reports</div>
+            <span class="feed-count" id="reportCount">Loading...</span>
+        </div>
+        <div id="reportsFeed">
+            <div style="text-align:center;padding:20px;color:#999;">⏳ Loading reports...</div>
+        </div>
+
+        <div class="stats-footer">
+            <span>👥 <strong id="todayCount">...</strong> today</span>
+            <span>📊 <strong id="totalCount">...</strong> total</span>
+        </div>
+
+        <div class="admob-banner-bottom">
+            <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-XXXXXXXXXXXXXXXX" data-ad-slot="2468013579" data-ad-format="auto" data-full-width-responsive="true"></ins>
+        </div>
+    </div>
+
+    <div class="disclaimer">
+        ⚠️ Community-driven app. Not affiliated with Johannesburg Water. Reports are user-generated.
+    </div>
+
+    <!-- Report Modal with Photo Upload -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal-sheet">
+            <h3 id="modalTitle">💧 Report Water Available</h3>
+            <div class="coord-display" id="coordDisplay">📍 Pin placed at: <span id="coordText"></span></div>
+            
+            <!-- Photo Upload -->
+            <label>📸 Add Photo (optional)</label>
+            <div class="photo-upload-area" id="photoUploadArea" onclick="document.getElementById('photoInput').click()">
+                <div id="uploadPrompt">
+                    <div style="font-size:32px;">📷</div>
+                    <div style="font-size:12px;color:#999;margin-top:4px;">Tap to take a photo</div>
+                </div>
+                <img id="photoPreview" class="photo-preview" src="" alt="Preview">
+                <button id="removePhotoBtn" class="remove-photo-btn" style="display:none;" onclick="event.stopPropagation(); removePhoto()">✕ Remove</button>
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="upload-progress-bar" id="uploadProgressBar"></div>
+                </div>
+            </div>
+            <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;" onchange="handlePhotoSelect(event)">
+            
+            <label>Location</label>
+            <input type="text" id="reportLocation" placeholder="e.g., Orange Farm, Soweto">
+            <label>Details</label>
+            <textarea id="reportDescription" placeholder="e.g., JHB Water confirmed outage. No ETR."></textarea>
+            <label>Status</label>
+            <select id="reportStatus">
+                <option value="active">✅ Water Available Now</option>
+                <option value="inactive">🚫 Dry / Tanker Left</option>
+                <option value="info">ℹ️ General Info</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-submit" id="submitBtn" onclick="submitReport()">Submit Report</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // ============ FIREBASE CONFIG ============
+        const firebaseConfig = {
+            apiKey: "AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",
+            authDomain: "amanzi-watch.firebaseapp.com",
+            projectId: "amanzi-watch",
+            storageBucket: "amanzi-watch.firebasestorage.app",
+            messagingSenderId: "850179740873",
+            appId: "1:850179740873:web:9ffa4eb1d43c831a8a6918"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const storage = firebase.storage();
+        const storageRef = storage.ref();
+
+        // ============ VISITOR COUNTER ============
+        const today = new Date().toISOString().split('T')[0];
+        let todayCount = 0, totalCount = 0;
+
+        async function trackVisit() {
+            const visitKey = `amanzi_visit_${today}`;
+            const alreadyVisited = localStorage.getItem(visitKey);
+            if (!alreadyVisited) {
+                localStorage.setItem(visitKey, '1');
+                try {
+                    const dailyRef = db.collection("stats").doc(today);
+                    await db.runTransaction(async (t) => {
+                        const doc = await t.get(dailyRef);
+                        if (!doc.exists) t.set(dailyRef, { count: 1, date: today });
+                        else t.update(dailyRef, { count: firebase.firestore.FieldValue.increment(1) });
+                    });
+                    const totalRef = db.collection("stats").doc("total");
+                    await db.runTransaction(async (t) => {
+                        const doc = await t.get(totalRef);
+                        if (!doc.exists) t.set(totalRef, { count: 1 });
+                        else t.update(totalRef, { count: firebase.firestore.FieldValue.increment(1) });
+                    });
+                } catch(e) {}
+            }
+            listenToStats();
+        }
+
+        function listenToStats() {
+            db.collection("stats").doc(today).onSnapshot((doc) => {
+                if (doc.exists) { todayCount = doc.data().count || 0; updateStatsDisplay(); }
+            });
+            db.collection("stats").doc("total").onSnapshot((doc) => {
+                if (doc.exists) { totalCount = doc.data().count || 0; updateStatsDisplay(); }
+            });
+        }
+
+        function updateStatsDisplay() {
+            document.getElementById('todayCount').textContent = todayCount || '...';
+            document.getElementById('totalCount').textContent = totalCount || '...';
+            document.getElementById('onlineCount').textContent = todayCount || '...';
+        }
+
+        // ============ PHOTO HANDLING ============
+        let selectedPhotoFile = null;
+        let selectedPhotoDataUrl = null;
+
+        function handlePhotoSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Check file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                showToast('⚠️ Photo too large. Max 5MB.');
+                return;
+            }
+
+            selectedPhotoFile = file;
+            
+            // Show preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                selectedPhotoDataUrl = e.target.result;
+                document.getElementById('photoPreview').src = selectedPhotoDataUrl;
+                document.getElementById('photoPreview').classList.add('show');
+                document.getElementById('uploadPrompt').style.display = 'none';
+                document.getElementById('removePhotoBtn').style.display = 'inline-block';
+                document.getElementById('photoUploadArea').classList.add('has-photo');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removePhoto() {
+            selectedPhotoFile = null;
+            selectedPhotoDataUrl = null;
+            document.getElementById('photoPreview').classList.remove('show');
+            document.getElementById('photoPreview').src = '';
+            document.getElementById('uploadPrompt').style.display = 'block';
+            document.getElementById('removePhotoBtn').style.display = 'none';
+            document.getElementById('photoUploadArea').classList.remove('has-photo');
+            document.getElementById('photoInput').value = '';
+            document.getElementById('uploadProgress').classList.remove('show');
+        }
+
+        async function uploadPhoto(reportId) {
+            if (!selectedPhotoFile) return null;
+            
+            const progressEl = document.getElementById('uploadProgress');
+            const progressBar = document.getElementById('uploadProgressBar');
+            progressEl.classList.add('show');
+            progressBar.style.width = '0%';
+            
+            try {
+                const photoRef = storageRef.child(`reports/${reportId}.jpg`);
+                const uploadTask = photoRef.put(selectedPhotoFile);
+                
+                uploadTask.on('state_changed',
+                    (snapshot) => {
+                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                        progressBar.style.width = progress + '%';
+                    }
+                );
+                
+                await uploadTask;
+                const downloadURL = await photoRef.getDownloadURL();
+                progressEl.classList.remove('show');
+                return downloadURL;
+            } catch (error) {
+                console.error('Photo upload error:', error);
+                progressEl.classList.remove('show');
+                return null;
+            }
+        }
+
+        // ============ APP STATE ============
+        let map, userMarker, selectedMarker, waterMarkers = [], reports = [], userLocation = null;
+        let selectedLocation = null, tapMode = false;
+        let currentReportType = 'active';
+        let searchTimeout;
+
+        // ============ FIREBASE REPORTS ============
+        function loadReportsFromFirebase() {
+            db.collection("reports").orderBy("timestamp", "desc").limit(50)
+                .onSnapshot((snapshot) => {
+                    reports = [];
+                    snapshot.forEach((doc) => {
+                        reports.push({ id: doc.id, ...doc.data() });
+                    });
+                    updateTimeStamps();
+                    renderAll();
+                }, (error) => {
+                    document.getElementById('reportsFeed').innerHTML = 
+                        '<div style="text-align:center;padding:20px;color:#999;">⚠️ Could not load reports</div>';
+                });
+        }
+
+        async function saveReportToFirebase(reportData) {
+            try {
+                const docRef = await db.collection("reports").add({
+                    location: reportData.location,
+                    description: reportData.description,
+                    status: reportData.status,
+                    lat: reportData.lat,
+                    lng: reportData.lng,
+                    hasPhoto: !!reportData.photoURL,
+                    photoURL: reportData.photoURL || null,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                return { success: true, id: docRef.id };
+            } catch (error) { return { success: false }; }
+        }
+
+        async function deleteReport(reportId) {
+            try {
+                // Also try to delete photo from storage
+                try { await storageRef.child(`reports/${reportId}.jpg`).delete(); } catch(e) {}
+                await db.collection("reports").doc(reportId).delete();
+                showToast('🗑️ Report removed');
+            } catch (error) { showToast('❌ Could not delete'); }
+        }
+
+        // ============ MAP ============
+        function initMap(lat, lng) {
+            map = L.map('map', { center: [lat, lng], zoom: 11, zoomControl: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            map.on('click', function(e) {
+                if (tapMode) placeSelectedPin(e.latlng.lat, e.latlng.lng);
+            });
+        }
+
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    if (userMarker) map.removeLayer(userMarker);
+                    userMarker = L.marker([userLocation.lat, userLocation.lng], {
+                        icon: L.divIcon({ className: 'user-location-marker', html: '<div style="background:#1a73e8;border:3px solid white;border-radius:50%;width:16px;height:16px;"></div>', iconSize: [16,16], iconAnchor: [8,8] })
+                    }).addTo(map).bindPopup('<b>📍 You are here</b>');
+                    map.setView([userLocation.lat, userLocation.lng], 13);
+                }, () => {}, { enableHighAccuracy: true, timeout: 10000 });
+            }
+        }
+
+        // ============ SEARCH ============
+        function searchPlaces(query) {
+            if (!query || query.length < 2) { document.getElementById('searchResults').classList.remove('show'); return; }
+            const searchQuery = query.toLowerCase().includes('johannesburg') || query.toLowerCase().includes('joburg') ? query : `${query}, Johannesburg, South Africa`;
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5&countrycodes=za&bounded=1&viewbox=27.5,-26.5,28.5,-25.5`)
+                .then(res => res.json())
+                .then(data => {
+                    const rc = document.getElementById('searchResults');
+                    if (data.length === 0) { rc.innerHTML = '<div style="padding:12px;color:#999;text-align:center;">No results</div>'; rc.classList.add('show'); return; }
+                    rc.innerHTML = data.map(p => `<div class="search-result-item" onclick="selectSearchResult(${p.lat},${p.lon},'${p.display_name.replace(/'/g,"\\'")}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong><br><small>${p.display_name.split(',').slice(1,3).join(',')}</small></div></div>`).join('');
+                    rc.classList.add('show');
+                });
+        }
+
+        function selectSearchResult(lat, lng, displayName) {
+            document.getElementById('searchResults').classList.remove('show');
+            document.getElementById('searchBox').value = displayName.split(',')[0];
+            map.setView([lat, lng], 15);
+            placeSelectedPin(lat, lng);
+            document.getElementById('reportLocation').value = displayName.split(',')[0];
+            showToast('📍 Location found! Add photo if you have one.');
+        }
+
+        // ============ TAP TO PIN ============
+        function toggleTapMode() {
+            tapMode = !tapMode;
+            const btn = document.getElementById('tapPinBtn');
+            if (tapMode) { btn.classList.add('active'); btn.innerHTML = '👆 Tap on Map'; map.getContainer().style.cursor = 'crosshair'; showToast('👆 Tap map or search above'); }
+            else { btn.classList.remove('active'); btn.innerHTML = '📍 Pin Location'; map.getContainer().style.cursor = ''; if (selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; } selectedLocation = null; document.getElementById('coordDisplay').style.display = 'none'; }
+        }
+
+        function placeSelectedPin(lat, lng) {
+            if (selectedMarker

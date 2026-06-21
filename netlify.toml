@@ -1,0 +1,7 @@
+[build]
+  functions = "functions"
+
+[functions]
+  "monitor" = {
+    schedule = "*/10 * * * *"
+  }
