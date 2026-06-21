@@ -1,228 +1,306 @@
-// ============ CONFIGURATION ============
-const X_API = {
-  consumerKey: 'IBW1oVoW1ze7MmtpM56Ru8S9l',
-  consumerSecret: '2WvGXLGCrLtpOKtHRAKDPB8ywu8OIk24hTx7TWz3VM4wyUEtmh',
-  accessToken: '2068024413526568960-Zfs9cO1BUqrfrqaBH3sSewAatdJcGo',
-  accessSecret: 'YNInpubUxHhcNygbQZ8qkl7k7Tow0JkhzOIpP4GeInMyC'
-};
-};
-
-const JHB_WATER_ID = '1083561126260609024';
-
-const OUTAGE_KEYWORDS = [
-  'outage', 'no water', 'burst pipe', 'burst main', 'interruption',
-  'disruption', 'shutdown', 'maintenance', 'no etr', 'dry',
-  'affected', 'repair', 'emergency', 'leak', 'tankers',
-  'restored', 'restoration', 'back on'
-];
-
-const JOBURG_AREAS = [
-  'Soweto', 'Alexandra', 'Lenasia', 'Orange Farm', 'Northriding',
-  'Randburg', 'Bryanston', 'Sandton', 'Midrand', 'Diepsloot',
-  'Roodepoort', 'Krugersdorp', 'Edenvale', 'Bedfordview',
-  'Boskruin', 'Honeydew', 'Fourways', 'Cosmo City',
-  'Ennerdale', 'Finetown', 'Lawley', 'Poortjie',
-  'Protea Glen', 'Dobsonville', 'Meadowlands', 'Orlando',
-  'Diepkloof', 'Pimville', 'Zola', 'Emdeni',
-  'Eldorado Park', 'Devland', 'Kliptown', 'Braamfischerville',
-  'Ivory Park', 'Tembisa', 'Olivenhoutbosch',
-  'Eikenhof', 'Crosby', 'Melville', 'Auckland Park',
-  'Greenside', 'Parkhurst', 'Rosebank', 'Hyde Park',
-  'Labiance', 'Bellairs', 'Bram Fischer'
-];
-
-const LOCATION_COORDS = {
-  'Soweto': { lat: -26.2485, lng: 27.8540 },
-  'Alexandra': { lat: -26.1057, lng: 28.0520 },
-  'Lenasia': { lat: -26.3320, lng: 27.8460 },
-  'Orange Farm': { lat: -26.4650, lng: 27.8670 },
-  'Northriding': { lat: -26.1050, lng: 27.9550 },
-  'Randburg': { lat: -26.0948, lng: 28.0085 },
-  'Bryanston': { lat: -26.0530, lng: 28.0200 },
-  'Diepsloot': { lat: -25.9350, lng: 28.0100 },
-  'Roodepoort': { lat: -26.1625, lng: 27.8725 },
-  'Midrand': { lat: -25.9990, lng: 28.1260 },
-  'Ennerdale': { lat: -26.4800, lng: 27.8500 },
-  'Finetown': { lat: -26.4700, lng: 27.8550 },
-  'Boskruin': { lat: -26.0900, lng: 27.9500 },
-  'Eikenhof': { lat: -26.3500, lng: 27.9200 },
-  'Sandton': { lat: -26.1000, lng: 28.0500 },
-  'Johannesburg': { lat: -26.2041, lng: 28.0473 }
-};
-
-// ============ MAIN FUNCTION ============
-exports.handler = async function(event, context) {
-  try {
-    console.log('🔍 Checking @JHBWater tweets...');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a73e8">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Amanzi Watch - Joburg Water Tracker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a73e8'/><text y='70' font-size='60' text-anchor='middle' x='50'>💧</text></svg>">
     
-    // Get bearer token
-    const bearerToken = await getBearerToken();
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
     
-    // Fetch recent tweets
-    const tweets = await fetchTweets(bearerToken);
-    
-    if (!tweets || tweets.length === 0) {
-      console.log('No new tweets found.');
-      return { statusCode: 200, body: 'No new tweets' };
-    }
-    
-    console.log(`Found ${tweets.length} tweets to check.`);
-    
-    // Process each tweet
-    for (const tweet of tweets) {
-      if (isOutageRelated(tweet.text)) {
-        const location = extractLocation(tweet.text);
-        const status = determineStatus(tweet.text);
-        const coords = getCoords(location);
-        
-        console.log(`📍 Outage detected: ${location} (${status})`);
-        
-        // Add to Firebase
-        await addToFirebase(location, tweet.text, status, coords);
-        
-        // Post to X
-        await postTweet(location, tweet.text, status);
-      }
-    }
-    
-    return { statusCode: 200, body: `Processed ${tweets.length} tweets` };
-    
-  } catch (error) {
-    console.error('Error:', error);
-    return { statusCode: 500, body: error.toString() };
-  }
-};
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .header h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .stats-badge { background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 15px; font-size: 12px; font-weight: 600; }
+        .map-container { flex: 1; position: relative; }
+        #map { height: 100%; width: 100%; }
+        .search-container { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 1000; max-width: 500px; margin: 0 auto; }
+        .search-box { width: 100%; padding: 12px 16px; border: none; border-radius: 25px; font-size: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); outline: none; padding-left: 40px; }
+        .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); font-size: 16px; }
+        .search-results { background: white; border-radius: 12px; margin-top: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 200px; overflow-y: auto; display: none; }
+        .search-results.show { display: block; }
+        .search-result-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+        .search-result-item:active { background: #e3f2fd; }
+        .bottom-panel { background: white; border-top: 1px solid #e0e0e0; padding: 12px 16px 16px; max-height: 40vh; overflow-y: auto; }
+        .quick-actions { display: flex; gap: 8px; margin-bottom: 12px; }
+        .action-btn { flex: 1; padding: 12px 6px; border: none; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; color: white; }
+        .btn-report { background: #4caf50; }
+        .btn-inactive { background: #f44336; }
+        .btn-nearby { background: #ff9800; }
+        .btn-share { background: #25D366; }
+        .action-btn .icon { font-size: 22px; }
+        .feed-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+        .live-dot { width: 8px; height: 8px; background: #4caf50; border-radius: 50%; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.3; } }
+        .report-card { background: #f8f9fa; border-radius: 10px; padding: 12px; margin-bottom: 8px; border-left: 4px solid #2196F3; font-size: 13px; position: relative; }
+        .report-card .location { font-weight: 700; color: #1a73e8; }
+        .report-card .time { font-size: 11px; color: #999; }
+        .report-card .description { margin: 4px 0; font-size: 12px; color: #666; }
+        .status-active { background: #e8f5e9; color: #2e7d32; display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .status-inactive { background: #ffebee; color: #c62828; display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+        .share-card-btn { position: absolute; right: 8px; bottom: 8px; background: #25D366; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: flex-end; justify-content: center; }
+        .modal-overlay.active { display: flex; }
+        .modal-sheet { background: white; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 24px 20px 32px; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        .modal-sheet h3 { margin-bottom: 16px; }
+        .modal-sheet input, .modal-sheet select, .modal-sheet textarea { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 10px; font-size: 14px; margin-bottom: 12px; font-family: inherit; }
+        .modal-sheet textarea { height: 80px; resize: none; }
+        .modal-actions { display: flex; gap: 10px; }
+        .modal-actions button { flex: 1; padding: 14px; border: none; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; }
+        .btn-cancel { background: #f5f5f5; color: #666; }
+        .btn-submit { background: #1a73e8; color: white; }
+        .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; font-weight: 600; z-index: 4000; }
+        .stats-footer { display: flex; justify-content: center; gap: 16px; padding: 8px; font-size: 11px; color: #888; }
+        .disclaimer { text-align: center; font-size: 10px; color: #bbb; padding: 8px; }
+        .user-marker { animation: pulse-blue 2s infinite; }
+        @keyframes pulse-blue { 0% { box-shadow: 0 0 0 0 rgba(26,115,232,0.6); } 70% { box-shadow: 0 0 0 20px rgba(26,115,232,0); } 100% { box-shadow: 0 0 0 0 rgba(26,115,232,0); } }
+        .water-active { background: #4caf50; border: 3px solid white; border-radius: 50%; width: 16px; height: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); animation: ripple-green 1.5s infinite; }
+        .water-inactive { background: #f44336; border: 3px solid white; border-radius: 50%; width: 16px; height: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+        @keyframes ripple-green { 0% { box-shadow: 0 0 0 0 rgba(76,175,80,0.5); } 70% { box-shadow: 0 0 0 18px rgba(76,175,80,0); } 100% { box-shadow: 0 0 0 0 rgba(76,175,80,0); } }
+        .map-buttons { position: absolute; bottom: 20px; right: 12px; z-index: 1000; display: flex; flex-direction: column; gap: 6px; }
+        .map-btn { background: white; color: #333; border: none; padding: 10px 14px; border-radius: 25px; font-weight: 700; font-size: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); cursor: pointer; }
+        .map-btn.primary { background: #ff6f00; color: white; }
+        .map-btn.active { background: #1a73e8; color: white; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>💧 Amanzi Watch</h1>
+        <div class="stats-badge" id="onlineCount">📍 Joburg</div>
+    </div>
 
-// ============ GET BEARER TOKEN ============
-async function getBearerToken() {
-  const credentials = Buffer.from(`${X_API.consumerKey}:${X_API.consumerSecret}`).toString('base64');
-  
-  const response = await fetch('https://api.twitter.com/oauth2/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Basic ${credentials}`,
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: 'grant_type=client_credentials'
-  });
-  
-  const data = await response.json();
-  return data.access_token;
-}
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="search-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" class="search-box" id="searchBox" placeholder="Search area... e.g. Soweto, Orange Farm" autocomplete="off">
+            <div class="search-results" id="searchResults"></div>
+        </div>
+        <div class="map-buttons">
+            <button class="map-btn primary" id="tapPinBtn" onclick="toggleTapMode()">📍 Pin Location</button>
+            <button class="map-btn" onclick="shareNearbyWater()">📤 Share</button>
+        </div>
+    </div>
 
-// ============ FETCH TWEETS ============
-async function fetchTweets(bearerToken) {
-  // Get tweets from last 15 minutes
-  const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  
-  const response = await fetch(
-    `https://api.twitter.com/2/users/${JHB_WATER_ID}/tweets?max_results=5&tweet.fields=created_at&start_time=${fifteenMinAgo}`,
-    {
-      headers: {
-        'Authorization': `Bearer ${bearerToken}`,
-        'Content-Type': 'application/json'
-      }
-    }
-  );
-  
-  const data = await response.json();
-  return data.data || [];
-}
+    <div class="bottom-panel">
+        <div class="quick-actions">
+            <button class="action-btn btn-report" onclick="openReportModal('active')"><span class="icon">💧</span>Water Here</button>
+            <button class="action-btn btn-inactive" onclick="openReportModal('inactive')"><span class="icon">🚫</span>Dry Area</button>
+            <button class="action-btn btn-nearby" onclick="findNearby()"><span class="icon">📍</span>Near Me</button>
+            <button class="action-btn btn-share" onclick="shareApp()"><span class="icon">📤</span>Share</button>
+        </div>
+        <div class="feed-title"><span class="live-dot"></span> Live Reports <span id="reportCount" style="font-weight:400;color:#999;font-size:12px;">-</span></div>
+        <div id="reportsFeed"><div style="text-align:center;padding:20px;color:#999;">⏳ Loading reports...</div></div>
+        <div class="stats-footer">
+            <span>👥 <strong id="todayCount">...</strong> today</span>
+            <span>📊 <strong id="totalCount">...</strong> total</span>
+        </div>
+    </div>
+    <div class="disclaimer">⚠️ Community-driven. Not affiliated with Johannesburg Water.</div>
 
-// ============ DETECT OUTAGE ============
-function isOutageRelated(text) {
-  const lower = text.toLowerCase();
-  return OUTAGE_KEYWORDS.some(kw => lower.includes(kw));
-}
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal-sheet">
+            <h3 id="modalTitle">💧 Report Water Available</h3>
+            <label>Location</label>
+            <input type="text" id="reportLocation" placeholder="e.g., Vilakazi St, Soweto">
+            <label>Details</label>
+            <textarea id="reportDescription" placeholder="e.g., Municipal truck, short queue"></textarea>
+            <label>Status</label>
+            <select id="reportStatus">
+                <option value="active">✅ Water Available</option>
+                <option value="inactive">🚫 Dry / No Water</option>
+                <option value="info">ℹ️ General Info</option>
+            </select>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-submit" id="submitBtn" onclick="submitReport()">Submit Report</button>
+            </div>
+        </div>
+    </div>
 
-function extractLocation(text) {
-  const lower = text.toLowerCase();
-  for (const area of JOBURG_AREAS) {
-    if (lower.includes(area.toLowerCase())) {
-      return area;
-    }
-  }
-  return 'Johannesburg';
-}
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",
+            authDomain: "amanzi-watch.firebaseapp.com",
+            projectId: "amanzi-watch",
+            storageBucket: "amanzi-watch.firebasestorage.app",
+            messagingSenderId: "850179740873",
+            appId: "1:850179740873:web:9ffa4eb1d43c831a8a6918"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
-function determineStatus(text) {
-  const lower = text.toLowerCase();
-  if (lower.includes('restored') || lower.includes('back on')) return 'active';
-  if (lower.includes('outage') || lower.includes('no water') || lower.includes('burst') || lower.includes('dry')) return 'inactive';
-  return 'info';
-}
+        let map, userMarker, selectedMarker, userLocation = null, selectedLocation = null;
+        let reports = [], waterMarkers = [], tapMode = false;
+        const today = new Date().toISOString().split('T')[0];
 
-function getCoords(area) {
-  return LOCATION_COORDS[area] || LOCATION_COORDS['Johannesburg'];
-}
+        // Load Reports
+        db.collection("reports").orderBy("timestamp", "desc").limit(50).onSnapshot(snap => {
+            reports = [];
+            snap.forEach(doc => reports.push({ id: doc.id, ...doc.data() }));
+            updateTimes();
+            renderAll();
+        });
 
-// ============ ADD TO FIREBASE ============
-async function addToFirebase(location, description, status, coords) {
-  const payload = {
-    fields: {
-      location: { stringValue: location },
-      description: { stringValue: description.substring(0, 200) },
-      status: { stringValue: status },
-      lat: { doubleValue: coords.lat },
-      lng: { doubleValue: coords.lng },
-      source: { stringValue: '@JHBWater auto-detected' },
-      timestamp: { timestampValue: new Date().toISOString() }
-    }
-  };
-  
-  await fetch(
-    'https://firestore.googleapis.com/v1/projects/amanzi-watch/databases/(default)/documents/reports',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    }
-  );
-}
+        // Track Visit
+        (async () => {
+            const key = `visit_${today}`;
+            if (!localStorage.getItem(key)) {
+                localStorage.setItem(key, '1');
+                try {
+                    const dRef = db.collection("stats").doc(today);
+                    await db.runTransaction(async t => { const d = await t.get(dRef); d.exists ? t.update(dRef, { count: firebase.firestore.FieldValue.increment(1) }) : t.set(dRef, { count: 1 }); });
+                    const tRef = db.collection("stats").doc("total");
+                    await db.runTransaction(async t => { const d = await t.get(tRef); d.exists ? t.update(tRef, { count: firebase.firestore.FieldValue.increment(1) }) : t.set(tRef, { count: 1 }); });
+                } catch(e) {}
+            }
+            db.collection("stats").doc(today).onSnapshot(d => { if(d.exists) document.getElementById('todayCount').textContent = d.data().count; });
+            db.collection("stats").doc("total").onSnapshot(d => { if(d.exists) document.getElementById('totalCount').textContent = d.data().count; });
+        })();
 
-// ============ POST TO X ============
-async function postTweet(location, text, status) {
-  const emoji = status === 'active' ? '💧' : status === 'inactive' ? '🚫' : 'ℹ️';
-  const statusText = status === 'active' ? 'Water Restored' : status === 'inactive' ? 'Water Outage' : 'Water Update';
-  
-  const tweetText = `${emoji} ${statusText}: ${location}\n\n@JHBWater reports: ${text.substring(0, 120)}...\n\n📍 Full map: https://amanzi-watch.netlify.app`;
-  
-  const oauthHeader = generateOAuthHeader('POST', 'https://api.twitter.com/2/tweets');
-  
-  await fetch('https://api.twitter.com/2/tweets', {
-    method: 'POST',
-    headers: {
-      'Authorization': oauthHeader,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ text: tweetText.substring(0, 280) })
-  });
-}
+        function updateTimes() {
+            reports.forEach(r => {
+                let ts = r.timestamp;
+                if (ts && ts.toDate) ts = ts.toDate().getTime();
+                else if (typeof ts === 'string') ts = new Date(ts).getTime();
+                else ts = Date.now();
+                const m = Math.floor((Date.now() - ts) / 60000);
+                r.time = m < 1 ? 'Just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.floor(m/60)}h ago` : `${Math.floor(m/1440)}d ago`;
+            });
+        }
 
-// ============ OAUTH 1.0 HEADER ============
-function generateOAuthHeader(method, url) {
-  const crypto = require('crypto');
-  
-  const oauth = {
-    oauth_consumer_key: X_API.consumerKey,
-    oauth_token: X_API.accessToken,
-    oauth_signature_method: 'HMAC-SHA1',
-    oauth_timestamp: Math.floor(Date.now() / 1000).toString(),
-    oauth_nonce: crypto.randomBytes(16).toString('hex'),
-    oauth_version: '1.0'
-  };
-  
-  const paramString = Object.keys(oauth).sort()
-    .map(k => `${k}=${encodeURIComponent(oauth[k])}`).join('&');
-  
-  const baseString = `${method.toUpperCase()}&${encodeURIComponent(url)}&${encodeURIComponent(paramString)}`;
-  const signingKey = `${encodeURIComponent(X_API.consumerSecret)}&${encodeURIComponent(X_API.accessSecret)}`;
-  
-  oauth.oauth_signature = crypto
-    .createHmac('sha1', signingKey)
-    .update(baseString)
-    .digest('base64');
-  
-  return 'OAuth ' + Object.keys(oauth).sort()
-    .map(k => `${k}="${encodeURIComponent(oauth[k])}"`).join(', ');
-}
+        function initMap() {
+            map = L.map('map', { center: [-26.2041, 28.0473], zoom: 11, zoomControl: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+            L.control.zoom({ position: 'topright' }).addTo(map);
+            map.on('click', e => { if(tapMode) placePin(e.latlng.lat, e.latlng.lng); });
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(pos => {
+                    userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    if(userMarker) map.removeLayer(userMarker);
+                    userMarker = L.marker([userLocation.lat, userLocation.lng], {
+                        icon: L.divIcon({ className: 'user-marker', html: '<div style="background:#1a73e8;border:3px solid white;border-radius:50%;width:16px;height:16px;"></div>', iconSize: [16,16], iconAnchor: [8,8] })
+                    }).addTo(map).bindPopup('<b>📍 You are here</b>');
+                }, () => {}, { enableHighAccuracy: true });
+            }
+        }
+
+        function renderAll() {
+            waterMarkers.forEach(m => map.removeLayer(m));
+            waterMarkers = [];
+            reports.forEach(r => {
+                if(!r.lat || !r.lng) return;
+                const cls = r.status === 'active' ? 'water-active' : 'water-inactive';
+                waterMarkers.push(L.marker([r.lat, r.lng], { icon: L.divIcon({ className: cls, iconSize: [16,16], iconAnchor: [8,8] }) }).addTo(map)
+                    .bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));
+            });
+            document.getElementById('reportCount').textContent = `${reports.length} reports`;
+            const feed = document.getElementById('reportsFeed');
+            if(!reports.length) {
+                feed.innerHTML = '<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first to report water!</p></div>';
+            } else {
+                feed.innerHTML = [...reports].sort((a,b) => (b.timestamp?.toDate?.()||0) - (a.timestamp?.toDate?.()||0)).slice(0,10).map(r => `
+                    <div class="report-card">
+                        <div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div>
+                        <p class="description">${r.description||''}</p>
+                        <span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span>
+                        <button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button>
+                    </div>`).join('');
+            }
+        }
+
+        function toggleTapMode() {
+            tapMode = !tapMode;
+            document.getElementById('tapPinBtn').classList.toggle('active', tapMode);
+            document.getElementById('tapPinBtn').textContent = tapMode ? '👆 Tap Map' : '📍 Pin Location';
+            map.getContainer().style.cursor = tapMode ? 'crosshair' : '';
+            if(!tapMode && selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; selectedLocation = null; }
+        }
+
+        function placePin(lat, lng) {
+            if(selectedMarker) map.removeLayer(selectedMarker);
+            selectedLocation = { lat, lng };
+            selectedMarker = L.marker([lat, lng], {
+                icon: L.divIcon({ className: 'water-active', iconSize: [20,20], iconAnchor: [10,10] })
+            }).addTo(map).bindPopup('<b>📍 Report here</b>').openPopup();
+            openReportModal('active');
+        }
+
+        function openReportModal(type) {
+            document.getElementById('modalTitle').textContent = type === 'active' ? '💧 Report Water Available' : '🚫 Report Dry Area';
+            document.getElementById('reportStatus').value = type === 'active' ? 'active' : 'inactive';
+            document.getElementById('reportModal').classList.add('active');
+        }
+        function closeModal() { document.getElementById('reportModal').classList.remove('active'); }
+
+        async function submitReport() {
+            const loc = document.getElementById('reportLocation').value;
+            const desc = document.getElementById('reportDescription').value;
+            const status = document.getElementById('reportStatus').value;
+            if(!loc) return alert('Please enter a location');
+            const btn = document.getElementById('submitBtn'); btn.textContent = 'Saving...'; btn.disabled = true;
+            const lat = selectedLocation ? selectedLocation.lat : userLocation ? userLocation.lat : -26.2041;
+            const lng = selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473;
+            await db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+            closeModal();
+            document.getElementById('reportLocation').value = '';
+            document.getElementById('reportDescription').value = '';
+            if(selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; }
+            selectedLocation = null;
+            if(tapMode) toggleTapMode();
+            btn.textContent = 'Submit Report'; btn.disabled = false;
+        }
+
+        function shareApp() { shareToWA(null, `💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.netlify.app\n\n*Free. No download.*`); }
+        function shareNearbyWater() {
+            if(!userLocation) return alert('Enable location first');
+            const nearby = reports.filter(r => r.status==='active' && r.lat && r.lng);
+            shareToWA(null, nearby.length ? `💧 *Water Nearby!*\n\n${nearby.slice(0,3).map(r => `📍 ${r.location}`).join('\n')}\n\n📱 https://amanziwatch.netlify.app` : `📱 https://amanziwatch.netlify.app`);
+        }
+        function shareToWA(id, msg) {
+            if(id) {
+                const r = reports.find(x => x.id === id);
+                if(r) msg = `${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.netlify.app`;
+            }
+            window.open((/Android|iPhone/i.test(navigator.userAgent) ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(msg), '_blank');
+        }
+
+        function findNearby() {
+            if(!userLocation) return alert('Enable location');
+            map.setView([userLocation.lat, userLocation.lng], 14);
+        }
+
+        // Search
+        document.getElementById('searchBox').addEventListener('input', function() {
+            const q = this.value;
+            if(q.length < 2) { document.getElementById('searchResults').classList.remove('show'); return; }
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q+', Johannesburg')}&limit=5&countrycodes=za`)
+                .then(r => r.json()).then(d => {
+                    const rc = document.getElementById('searchResults');
+                    rc.innerHTML = d.length ? d.map(p => `<div class="search-result-item" onclick="selectResult(${p.lat},${p.lon},'${p.display_name.split(',')[0]}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong></div></div>`).join('') : '<div style="padding:12px;color:#999;">No results</div>';
+                    rc.classList.add('show');
+                });
+        });
+        function selectResult(lat, lng, name) {
+            document.getElementById('searchResults').classList.remove('show');
+            document.getElementById('searchBox').value = name;
+            map.setView([lat, lng], 15);
+            placePin(lat, lng);
+            document.getElementById('reportLocation').value = name;
+        }
+        document.addEventListener('click', e => { if(!e.target.closest('.search-container')) document.getElementById('searchResults').classList.remove('show'); });
+        document.getElementById('reportModal').addEventListener('click', function(e) { if(e.target===this) closeModal(); });
+
+        initMap();
+    </script>
+</body>
+</html>
