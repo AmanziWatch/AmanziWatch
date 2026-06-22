@@ -8,9 +8,6 @@
     <!-- Monetag Verification -->
     <meta name="monetag" content="328ebbec49451023f19937256c97b3ae">
     
-    <!-- Monetag In-Page Push Banner -->
-    <script>(function(s){s.dataset.zone='11185977',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
-    
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -201,6 +198,7 @@
 
         let map, userMarker, selectedMarker, userLocation = null, selectedLocation = null;
         let reports = [], waterMarkers = [], tapMode = false;
+        let interstitialCount = 0;
         const today = new Date().toISOString().split('T')[0];
 
         // Load Reports
@@ -309,6 +307,15 @@
         }
         function closeModal() { document.getElementById('reportModal').classList.remove('active'); }
 
+        // ============ MONETAG INTERSTITIAL ============
+        function showInterstitialAd() {
+            if (interstitialCount >= 3) return; // Max 3 per session
+            if (typeof monetag !== 'undefined' && monetag.interstitial) {
+                monetag.interstitial.show();
+                interstitialCount++;
+            }
+        }
+
         async function submitReport() {
             const loc = document.getElementById('reportLocation').value;
             const desc = document.getElementById('reportDescription').value;
@@ -319,10 +326,14 @@
             const lng = selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473;
             try {
                 await db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                showToast('✅ Report saved!');
+                // Show interstitial ad after successful report
+                setTimeout(() => showInterstitialAd(), 1500);
             } catch(e) {
                 const offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
                 offlineReports.push({ location: loc, description: desc, status, lat, lng, timestamp: Date.now() });
                 localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
+                showToast('📱 Saved offline');
             }
             closeModal();
             document.getElementById('reportLocation').value = '';
