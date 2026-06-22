@@ -1,7 +1,7 @@
 {
   "name": "Amanzi Watch - Joburg Water Tracker",
   "short_name": "Amanzi Watch",
-  "start_url": "/",
+  "start_url": "/AmanziWatch/",
   "display": "standalone",
   "background_color": "#1a73e8",
   "theme_color": "#1a73e8",
