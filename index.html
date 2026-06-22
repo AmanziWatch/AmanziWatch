@@ -16,7 +16,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Amanzi Watch">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a73e8'/><text y='72' font-size='60' text-anchor='middle' x='50'>💧</text></svg>">
-    <link rel="manifest" href="/AmanziWatch/manifest.json">
+    <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%231a73e8'/><text y='72' font-size='60' text-anchor='middle' x='50'>💧</text></svg>">
     
     <title>Amanzi Watch - Joburg Water Tracker</title>
@@ -150,7 +150,7 @@
     <script>
         // ============ PWA - SERVICE WORKER ============
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/AmanziWatch/sw.js')
+            navigator.serviceWorker.register('sw.js')
                 .then(reg => console.log('✅ Service Worker registered'))
                 .catch(err => console.log('❌ SW error:', err));
         }
