@@ -275,29 +275,44 @@
         }
         function closeModal() { document.getElementById('reportModal').classList.remove('active'); }
 
-        async function submitReport() {
+        // ============ INSTANT SUBMIT — NO FREEZE ============
+        function submitReport() {
             const loc = document.getElementById('reportLocation').value;
             const desc = document.getElementById('reportDescription').value;
             const status = document.getElementById('reportStatus').value;
             if(!loc) return alert('Please enter a location');
             
+            // Close modal instantly
             closeModal();
             document.getElementById('reportLocation').value = '';
             document.getElementById('reportDescription').value = '';
             if(selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; }
             selectedLocation = null;
             if(tapMode) toggleTapMode();
+            
+            // Add to local reports immediately — shows in feed NOW
+            const newReport = {
+                id: 'local-' + Date.now(),
+                location: loc,
+                description: desc || '',
+                status: status,
+                lat: selectedLocation ? selectedLocation.lat : userLocation ? userLocation.lat : -26.2041,
+                lng: selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473,
+                time: 'Just now',
+                timestamp: { toDate: () => new Date() }
+            };
+            reports.unshift(newReport);
+            renderAll();
             showToast('✅ Report saved!');
             
+            // Save to Firebase silently in background — no freeze
             const lat = selectedLocation ? selectedLocation.lat : userLocation ? userLocation.lat : -26.2041;
             const lng = selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473;
-            try {
-                await db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-            } catch(e) {
+            db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {
                 const offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
                 offlineReports.push({ location: loc, description: desc, status, lat, lng, timestamp: Date.now() });
                 localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
-            }
+            });
         }
 
         function shareApp() { shareToWA(null, `💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`); }
@@ -329,4 +344,4 @@
         initMap();
     </script>
 </body>
-</html>
+    </html>
