@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#1a73e8">
     
-    <!-- Monetag Verification -->
-    <meta name="monetag" content="328ebbec49451023f19937256c97b3ae">
-    
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -66,7 +63,9 @@
         .modal-actions button { flex: 1; padding: 14px; border: none; border-radius: 10px; font-weight: 700; font-size: 14px; cursor: pointer; }
         .btn-cancel { background: #f5f5f5; color: #666; }
         .btn-submit { background: #1a73e8; color: white; }
-        .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; font-weight: 600; z-index: 4000; }
+        .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 12px 24px; border-radius: 25px; font-size: 14px; font-weight: 600; z-index: 4000; animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards; }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; } }
         .stats-footer { display: flex; justify-content: center; gap: 16px; padding: 8px; font-size: 11px; color: #888; }
         .disclaimer { text-align: center; font-size: 10px; color: #bbb; padding: 8px; }
         .user-marker { animation: pulse-blue 2s infinite; }
@@ -163,42 +162,32 @@
             if (deferredPrompt) {
                 deferredPrompt.prompt();
                 deferredPrompt.userChoice.then((choiceResult) => {
-                    if (choiceResult.outcome === 'accepted') {
-                        showToast('✅ App installed!');
-                    }
+                    if (choiceResult.outcome === 'accepted') showToast('✅ App installed!');
                     deferredPrompt = null;
                 });
             } else if (window.matchMedia('(display-mode: standalone)').matches) {
                 showToast('✅ App already installed!');
             } else {
                 const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-                if (isIOS) {
-                    alert('To install:\n\n1. Tap the Share icon 📤\n2. Scroll down\n3. Tap "Add to Home Screen"');
-                } else {
-                    alert('To install:\n\n1. Tap the browser menu (⋮)\n2. Tap "Add to Home Screen" or "Install app"');
-                }
+                alert(isIOS ? 'To install:\n\n1. Tap Share 📤\n2. Tap "Add to Home Screen"' : 'To install:\n\n1. Tap browser menu (⋮)\n2. Tap "Add to Home Screen"');
             }
         }
 
-        window.addEventListener('appinstalled', () => {
-            deferredPrompt = null;
-        });
+        window.addEventListener('appinstalled', () => { deferredPrompt = null; });
 
         // ============ FIREBASE ============
-        const firebaseConfig = {
+        firebase.initializeApp({
             apiKey: "AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",
             authDomain: "amanzi-watch.firebaseapp.com",
             projectId: "amanzi-watch",
             storageBucket: "amanzi-watch.firebasestorage.app",
             messagingSenderId: "850179740873",
             appId: "1:850179740873:web:9ffa4eb1d43c831a8a6918"
-        };
-        firebase.initializeApp(firebaseConfig);
+        });
         const db = firebase.firestore();
 
         let map, userMarker, selectedMarker, userLocation = null, selectedLocation = null;
         let reports = [], waterMarkers = [], tapMode = false;
-        let interstitialCount = 0;
         const today = new Date().toISOString().split('T')[0];
 
         // Load Reports
@@ -207,8 +196,6 @@
             snap.forEach(doc => reports.push({ id: doc.id, ...doc.data() }));
             updateTimes();
             renderAll();
-        }, error => {
-            console.log('Offline mode - using cached data');
         });
 
         // Track Visit
@@ -254,10 +241,7 @@
             }
         }
 
-        function goHome() {
-            map.setView([-26.2041, 28.0473], 11);
-            showToast('📍 Johannesburg');
-        }
+        function goHome() { map.setView([-26.2041, 28.0473], 11); showToast('📍 Johannesburg'); }
 
         function renderAll() {
             waterMarkers.forEach(m => map.removeLayer(m));
@@ -270,17 +254,7 @@
             });
             document.getElementById('reportCount').textContent = `${reports.length} reports`;
             const feed = document.getElementById('reportsFeed');
-            if(!reports.length) {
-                feed.innerHTML = '<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first to report water!</p></div>';
-            } else {
-                feed.innerHTML = [...reports].sort((a,b) => (b.timestamp?.toDate?.()||0) - (a.timestamp?.toDate?.()||0)).slice(0,10).map(r => `
-                    <div class="report-card">
-                        <div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div>
-                        <p class="description">${r.description||''}</p>
-                        <span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span>
-                        <button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button>
-                    </div>`).join('');
-            }
+            feed.innerHTML = !reports.length ? '<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first to report water!</p></div>' : [...reports].sort((a,b) => (b.timestamp?.toDate?.()||0) - (a.timestamp?.toDate?.()||0)).slice(0,10).map(r => `<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button></div>`).join('');
         }
 
         function toggleTapMode() {
@@ -294,9 +268,7 @@
         function placePin(lat, lng) {
             if(selectedMarker) map.removeLayer(selectedMarker);
             selectedLocation = { lat, lng };
-            selectedMarker = L.marker([lat, lng], {
-                icon: L.divIcon({ className: 'water-active', iconSize: [20,20], iconAnchor: [10,10] })
-            }).addTo(map).bindPopup('<b>📍 Report here</b>').openPopup();
+            selectedMarker = L.marker([lat, lng], { icon: L.divIcon({ className: 'water-active', iconSize: [20,20], iconAnchor: [10,10] }) }).addTo(map).bindPopup('<b>📍 Report here</b>').openPopup();
             openReportModal('active');
         }
 
@@ -307,61 +279,37 @@
         }
         function closeModal() { document.getElementById('reportModal').classList.remove('active'); }
 
-        // ============ MONETAG INTERSTITIAL ============
-        function showInterstitialAd() {
-            if (interstitialCount >= 3) return; // Max 3 per session
-            if (typeof monetag !== 'undefined' && monetag.interstitial) {
-                monetag.interstitial.show();
-                interstitialCount++;
-            }
-        }
-
         async function submitReport() {
             const loc = document.getElementById('reportLocation').value;
             const desc = document.getElementById('reportDescription').value;
             const status = document.getElementById('reportStatus').value;
             if(!loc) return alert('Please enter a location');
-            const btn = document.getElementById('submitBtn'); btn.textContent = 'Saving...'; btn.disabled = true;
-            const lat = selectedLocation ? selectedLocation.lat : userLocation ? userLocation.lat : -26.2041;
-            const lng = selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473;
-            try {
-                await db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
-                showToast('✅ Report saved!');
-                // Show interstitial ad after successful report
-                setTimeout(() => showInterstitialAd(), 1500);
-            } catch(e) {
-                const offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
-                offlineReports.push({ location: loc, description: desc, status, lat, lng, timestamp: Date.now() });
-                localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
-                showToast('📱 Saved offline');
-            }
+            
+            // Close instantly — feels fast
             closeModal();
             document.getElementById('reportLocation').value = '';
             document.getElementById('reportDescription').value = '';
             if(selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; }
             selectedLocation = null;
             if(tapMode) toggleTapMode();
-            btn.textContent = 'Submit Report'; btn.disabled = false;
-        }
-
-        function shareApp() { shareToWA(null, `💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download. Add to home screen!*`); }
-        function shareNearbyWater() {
-            if(!userLocation) return alert('Enable location first');
-            const nearby = reports.filter(r => r.status==='active' && r.lat && r.lng);
-            shareToWA(null, nearby.length ? `💧 *Water Nearby!*\n\n${nearby.slice(0,3).map(r => `📍 ${r.location}`).join('\n')}\n\n📱 https://amanziwatch.github.io/AmanziWatch/` : `📱 https://amanziwatch.github.io/AmanziWatch/`);
-        }
-        function shareToWA(id, msg) {
-            if(id) {
-                const r = reports.find(x => x.id === id);
-                if(r) msg = `${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.github.io/AmanziWatch/`;
+            showToast('✅ Report saved!');
+            
+            // Save in background
+            const lat = selectedLocation ? selectedLocation.lat : userLocation ? userLocation.lat : -26.2041;
+            const lng = selectedLocation ? selectedLocation.lng : userLocation ? userLocation.lng : 28.0473;
+            try {
+                await db.collection("reports").add({ location: loc, description: desc || '', status, lat, lng, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+            } catch(e) {
+                const offlineReports = JSON.parse(localStorage.getItem('offlineReports') || '[]');
+                offlineReports.push({ location: loc, description: desc, status, lat, lng, timestamp: Date.now() });
+                localStorage.setItem('offlineReports', JSON.stringify(offlineReports));
             }
-            window.open((/Android|iPhone/i.test(navigator.userAgent) ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(msg), '_blank');
         }
 
-        function findNearby() {
-            if(!userLocation) return alert('Enable location');
-            map.setView([userLocation.lat, userLocation.lng], 14);
-        }
+        function shareApp() { shareToWA(null, `💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`); }
+        function shareNearbyWater() { if(!userLocation) return alert('Enable location first'); const nearby = reports.filter(r => r.status==='active' && r.lat && r.lng); shareToWA(null, nearby.length ? `💧 *Water Nearby!*\n\n${nearby.slice(0,3).map(r => `📍 ${r.location}`).join('\n')}\n\n📱 https://amanziwatch.github.io/AmanziWatch/` : `📱 https://amanziwatch.github.io/AmanziWatch/`); }
+        function shareToWA(id, msg) { if(id) { const r = reports.find(x => x.id === id); if(r) msg = `${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.github.io/AmanziWatch/`; } window.open((/Android|iPhone/i.test(navigator.userAgent) ? 'whatsapp://send?text=' : 'https://wa.me/?text=') + encodeURIComponent(msg), '_blank'); }
+        function findNearby() { if(!userLocation) return alert('Enable location'); map.setView([userLocation.lat, userLocation.lng], 14); }
 
         // Search
         document.getElementById('searchBox').addEventListener('input', function() {
