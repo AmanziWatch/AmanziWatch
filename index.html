@@ -147,93 +147,42 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // ============ PWA ============
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js').catch(() => {});
-        }
-
+        if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
-        function installApp() {
-            if (deferredPrompt) { deferredPrompt.prompt(); deferredPrompt = null; }
-            else if (window.matchMedia('(display-mode: standalone)').matches) { showToast('✅ Already installed!'); }
-            else { alert(/iPhone|iPad/i.test(navigator.userAgent) ? 'Tap Share 📤 → Add to Home Screen' : 'Tap ⋮ → Add to Home Screen'); }
-        }
+        function installApp() { if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;} else if(window.matchMedia('(display-mode: standalone)').matches){showToast('✅ Already installed!');} else {alert(/iPhone|iPad/i.test(navigator.userAgent)?'Tap Share 📤 → Add to Home Screen':'Tap ⋮ → Add to Home Screen');} }
 
         // ============ FIREBASE ============
-        firebase.initializeApp({ apiKey: "AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU", authDomain: "amanzi-watch.firebaseapp.com", projectId: "amanzi-watch", storageBucket: "amanzi-watch.firebasestorage.app", messagingSenderId: "850179740873", appId: "1:850179740873:web:9ffa4eb1d43c831a8a6918" });
+        firebase.initializeApp({ apiKey:"AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",authDomain:"amanzi-watch.firebaseapp.com",projectId:"amanzi-watch",storageBucket:"amanzi-watch.firebasestorage.app",messagingSenderId:"850179740873",appId:"1:850179740873:web:9ffa4eb1d43c831a8a6918" });
         const db = firebase.firestore();
-
-        let map, userMarker, selectedMarker, userLocation = null, selectedLocation = null;
-        let reports = [], waterMarkers = [], tapMode = false, adCount = 0;
+        let map, userMarker, selectedMarker, userLocation=null, selectedLocation=null;
+        let reports=[], waterMarkers=[], tapMode=false, adCount=0;
         const today = new Date().toISOString().split('T')[0];
 
-        db.collection("reports").orderBy("timestamp", "desc").limit(50).onSnapshot(snap => {
-            reports = []; snap.forEach(doc => reports.push({ id: doc.id, ...doc.data() })); updateTimes(); renderAll();
-        });
+        db.collection("reports").orderBy("timestamp","desc").limit(50).onSnapshot(snap=>{reports=[];snap.forEach(doc=>reports.push({id:doc.id,...doc.data()}));updateTimes();renderAll();});
+        (async()=>{const key=`visit_${today}`;if(!localStorage.getItem(key)){localStorage.setItem(key,'1');try{await db.collection("stats").doc(today).set({count:firebase.firestore.FieldValue.increment(1)},{merge:true});await db.collection("stats").doc("total").set({count:firebase.firestore.FieldValue.increment(1)},{merge:true});}catch(e){}}db.collection("stats").doc(today).onSnapshot(d=>{if(d.exists)document.getElementById('todayCount').textContent=d.data().count;});db.collection("stats").doc("total").onSnapshot(d=>{if(d.exists)document.getElementById('totalCount').textContent=d.data().count;});})();
+        function updateTimes(){reports.forEach(r=>{let ts=r.timestamp;if(ts?.toDate)ts=ts.toDate().getTime();else if(typeof ts==='string')ts=new Date(ts).getTime();else ts=Date.now();const m=Math.floor((Date.now()-ts)/60000);r.time=m<1?'Just now':m<60?`${m}m ago`:m<1440?`${Math.floor(m/60)}h ago`:`${Math.floor(m/1440)}d ago`;});}
 
-        (async () => {
-            const key = `visit_${today}`;
-            if (!localStorage.getItem(key)) { localStorage.setItem(key, '1'); try { await db.collection("stats").doc(today).set({ count: firebase.firestore.FieldValue.increment(1) }, { merge: true }); await db.collection("stats").doc("total").set({ count: firebase.firestore.FieldValue.increment(1) }, { merge: true }); } catch(e) {} }
-            db.collection("stats").doc(today).onSnapshot(d => { if(d.exists) document.getElementById('todayCount').textContent = d.data().count; });
-            db.collection("stats").doc("total").onSnapshot(d => { if(d.exists) document.getElementById('totalCount').textContent = d.data().count; });
-        })();
-
-        function updateTimes() { reports.forEach(r => { let ts = r.timestamp; if(ts?.toDate) ts = ts.toDate().getTime(); else if(typeof ts === 'string') ts = new Date(ts).getTime(); else ts = Date.now(); const m = Math.floor((Date.now()-ts)/60000); r.time = m<1?'Just now':m<60?`${m}m ago`:m<1440?`${Math.floor(m/60)}h ago`:`${Math.floor(m/1440)}d ago`; }); }
-
-        function initMap() {
-            map = L.map('map', { center: [-26.2041,28.0473], zoom: 11, zoomControl: false });
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-            L.control.zoom({ position: 'topright' }).addTo(map);
-            map.on('click', e => { if(tapMode) placePin(e.latlng.lat, e.latlng.lng); });
-            navigator.geolocation?.getCurrentPosition(pos => { userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude }; if(userMarker) map.removeLayer(userMarker); userMarker = L.marker([userLocation.lat, userLocation.lng], { icon: L.divIcon({ className: 'user-marker', html: '<div style="background:#1a73e8;border:3px solid white;border-radius:50%;width:16px;height:16px;"></div>', iconSize: [16,16], iconAnchor: [8,8] }) }).addTo(map).bindPopup('<b>📍 You are here</b>'); }, () => {}, { enableHighAccuracy: true });
-        }
-
-        function goHome() { map.setView([-26.2041,28.0473], 11); showToast('📍 Johannesburg'); }
-
-        function renderAll() {
-            waterMarkers.forEach(m => map.removeLayer(m)); waterMarkers = [];
-            reports.forEach(r => { if(!r.lat||!r.lng) return; waterMarkers.push(L.marker([r.lat,r.lng], { icon: L.divIcon({ className: r.status==='active'?'water-active':'water-inactive', iconSize: [16,16], iconAnchor: [8,8] }) }).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`)); });
-            document.getElementById('reportCount').textContent = `${reports.length} reports`;
-            document.getElementById('reportsFeed').innerHTML = !reports.length ? '<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>' : [...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button></div>`).join('');
-        }
-
-        function toggleTapMode() { tapMode=!tapMode; document.getElementById('tapPinBtn').classList.toggle('active',tapMode); document.getElementById('tapPinBtn').textContent=tapMode?'👆 Tap Map':'📍 Pin Location'; map.getContainer().style.cursor=tapMode?'crosshair':''; if(!tapMode&&selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;selectedLocation=null;} }
+        function initMap(){map=L.map('map',{center:[-26.2041,28.0473],zoom:11,zoomControl:false});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);L.control.zoom({position:'topright'}).addTo(map);map.on('click',e=>{if(tapMode)placePin(e.latlng.lat,e.latlng.lng);});navigator.geolocation?.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};if(userMarker)map.removeLayer(userMarker);userMarker=L.marker([userLocation.lat,userLocation.lng],{icon:L.divIcon({className:'user-marker',html:'<div style="background:#1a73e8;border:3px solid white;border-radius:50%;width:16px;height:16px;"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup('<b>📍 You are here</b>');},()=>{},{enableHighAccuracy:true});}
+        function goHome(){map.setView([-26.2041,28.0473],11);showToast('📍 Johannesburg');}
+        function renderAll(){waterMarkers.forEach(m=>map.removeLayer(m));waterMarkers=[];reports.forEach(r=>{if(!r.lat||!r.lng)return;waterMarkers.push(L.marker([r.lat,r.lng],{icon:L.divIcon({className:r.status==='active'?'water-active':'water-inactive',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));});document.getElementById('reportCount').textContent=`${reports.length} reports`;document.getElementById('reportsFeed').innerHTML=!reports.length?'<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>':[...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button></div>`).join('');}
+        function toggleTapMode(){tapMode=!tapMode;document.getElementById('tapPinBtn').classList.toggle('active',tapMode);document.getElementById('tapPinBtn').textContent=tapMode?'👆 Tap Map':'📍 Pin Location';map.getContainer().style.cursor=tapMode?'crosshair':'';if(!tapMode&&selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;selectedLocation=null;}}
         function placePin(lat,lng){if(selectedMarker)map.removeLayer(selectedMarker);selectedLocation={lat,lng};selectedMarker=L.marker([lat,lng],{icon:L.divIcon({className:'water-active',iconSize:[20,20],iconAnchor:[10,10]})}).addTo(map).bindPopup('<b>📍 Report here</b>').openPopup();openReportModal('active');}
         function openReportModal(type){document.getElementById('modalTitle').textContent=type==='active'?'💧 Report Water Available':'🚫 Report Dry Area';document.getElementById('reportStatus').value=type==='active'?'active':'inactive';document.getElementById('reportModal').classList.add('active');}
         function closeModal(){document.getElementById('reportModal').classList.remove('active');}
 
-        // ============ INSTANT SUBMIT + INTERSTITIAL AD ============
-        function submitReport() {
-            const loc = document.getElementById('reportLocation').value;
-            const desc = document.getElementById('reportDescription').value;
-            const status = document.getElementById('reportStatus').value;
-            if(!loc) return alert('Please enter a location');
-            closeModal();
-            document.getElementById('reportLocation').value = '';
-            document.getElementById('reportDescription').value = '';
-            if(selectedMarker) { map.removeLayer(selectedMarker); selectedMarker = null; }
-            selectedLocation = null;
-            if(tapMode) toggleTapMode();
-            
-            // Instant local save
-            reports.unshift({ id: 'local-'+Date.now(), location: loc, description: desc||'', status, lat: selectedLocation?.lat || userLocation?.lat || -26.2041, lng: selectedLocation?.lng || userLocation?.lng || 28.0473, time: 'Just now', timestamp: { toDate: ()=>new Date() } });
-            renderAll();
-            showToast('✅ Report saved!');
-            
-            // Firebase in background
-            db.collection("reports").add({ location: loc, description: desc||'', status, lat: selectedLocation?.lat||userLocation?.lat||-26.2041, lng: selectedLocation?.lng||userLocation?.lng||28.0473, timestamp: firebase.firestore.FieldValue.serverTimestamp() }).catch(() => {});
-            
-            // Show interstitial ad (max 2 per session)
-            if (adCount < 2) { setTimeout(() => { if(window.monetag) monetag.interstitial?.show(); adCount++; }, 2000); }
-        }
-
+        // ============ INSTANT SUBMIT + AD ============
+        function submitReport(){const loc=document.getElementById('reportLocation').value;const desc=document.getElementById('reportDescription').value;const status=document.getElementById('reportStatus').value;if(!loc)return alert('Please enter a location');closeModal();document.getElementById('reportLocation').value='';document.getElementById('reportDescription').value='';if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}selectedLocation=null;if(tapMode)toggleTapMode();reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});renderAll();showToast('✅ Report saved!');db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});if(adCount<2){setTimeout(()=>{if(window.monetag)monetag.interstitial?.show();adCount++;},2000);}}
         function shareApp(){shareToWA(null,`💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`);}
         function shareNearbyWater(){if(!userLocation)return alert('Enable location');shareToWA(null,`📱 https://amanziwatch.github.io/AmanziWatch/`);}
         function shareToWA(id,msg){if(id){const r=reports.find(x=>x.id===id);if(r)msg=`${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.github.io/AmanziWatch/`;}window.open((/Android|iPhone/i.test(navigator.userAgent)?'whatsapp://send?text=':'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');}
         function findNearby(){if(!userLocation)return alert('Enable location');map.setView([userLocation.lat,userLocation.lng],14);}
 
-        // Search
-        document.getElementById('searchBox').addEventListener('input',function(){const q=this.value;if(q.length<2){document.getElementById('searchResults').classList.remove('show');return;}fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q+', Johannesburg')}&limit=5&countrycodes=za`).then(r=>r.json()).then(d=>{const rc=document.getElementById('searchResults');rc.innerHTML=d.length?d.map(p=>`<div class="search-result-item" onclick="selectResult(${p.lat},${p.lon},'${p.display_name.split(',')[0]}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong></div></div>`).join(''):'<div style="padding:12px;color:#999;">No results</div>';rc.classList.add('show');}).catch(()=>{});});
+        // ============ INSTANT OFFLINE SEARCH ============
+        const JOBURG_AREAS=['Soweto','Alexandra','Lenasia','Orange Farm','Northriding','Randburg','Bryanston','Sandton','Midrand','Diepsloot','Roodepoort','Krugersdorp','Edenvale','Bedfordview','Boskruin','Honeydew','Fourways','Cosmo City','Ennerdale','Finetown','Lawley','Poortjie','Protea Glen','Dobsonville','Meadowlands','Orlando','Diepkloof','Pimville','Zola','Emdeni','Eldorado Park','Devland','Kliptown','Ivory Park','Tembisa','Olivenhoutbosch','Eikenhof','Crosby','Melville','Auckland Park','Greenside','Parkhurst','Rosebank','Hyde Park','Linmeyer','Linksfield','Whiteridge','Bram Fischer'];
+        const AREA_COORDS={Soweto:[-26.2485,27.854],Alexandra:[-26.1057,28.052],Lenasia:[-26.332,27.846],'Orange Farm':[-26.465,27.867],Northriding:[-26.105,27.955],Randburg:[-26.0948,28.0085],Bryanston:[-26.053,28.02],Diepsloot:[-25.935,28.01],Roodepoort:[-26.1625,27.8725],Midrand:[-25.999,28.126],Ennerdale:[-26.48,27.85],Boskruin:[-26.09,27.95],Sandton:[-26.1,28.05],Fourways:[-26.01,28.0],'Cosmo City':[-25.98,27.93],'Protea Glen':[-26.28,27.82],Dobsonville:[-26.23,27.86],'Eldorado Park':[-26.3,27.89],'Ivory Park':[-26.0,28.15],Tembisa:[-26.0,28.2],Eikenhof:[-26.35,27.92],Linmeyer:[-26.26,28.1],Linksfield:[-26.16,28.1],Whiteridge:[-26.07,27.95]};
+
+        document.getElementById('searchBox').addEventListener('input',function(){const q=this.value.toLowerCase().trim();if(q.length<1){document.getElementById('searchResults').classList.remove('show');return;}const matches=JOBURG_AREAS.filter(a=>a.toLowerCase().includes(q)).slice(0,5);const rc=document.getElementById('searchResults');if(matches.length>0){rc.innerHTML=matches.map(a=>{const c=AREA_COORDS[a]||[-26.2041,28.0473];return`<div class="search-result-item" onclick="selectResult(${c[0]},${c[1]},'${a}')"><span>📍</span><div><strong>${a}</strong><br><small>Johannesburg</small></div></div>`;}).join('');rc.classList.add('show');return;}fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.value+', Johannesburg')}&limit=3&countrycodes=za`).then(r=>r.json()).then(d=>{rc.innerHTML=d.length?d.map(p=>`<div class="search-result-item" onclick="selectResult(${p.lat},${p.lon},'${p.display_name.split(',')[0]}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong></div></div>`).join(''):'<div style="padding:12px;color:#999;">No results — try a nearby area</div>';rc.classList.add('show');}).catch(()=>{rc.innerHTML='<div style="padding:12px;color:#999;">Type an area name</div>';rc.classList.add('show');});});
         function selectResult(lat,lng,name){document.getElementById('searchResults').classList.remove('show');document.getElementById('searchBox').value=name;map.setView([lat,lng],15);placePin(lat,lng);document.getElementById('reportLocation').value=name;}
         document.addEventListener('click',e=>{if(!e.target.closest('.search-container'))document.getElementById('searchResults').classList.remove('show');});
         document.getElementById('reportModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
