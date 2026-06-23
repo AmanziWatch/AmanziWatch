@@ -5,9 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#1a73e8">
     
-    <!-- Monetag Verification -->
-    <meta name="monetag" content="328ebbec49451023f19937256c97b3ae">
-    
     <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -153,7 +150,7 @@
         firebase.initializeApp({ apiKey:"AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",authDomain:"amanzi-watch.firebaseapp.com",projectId:"amanzi-watch",storageBucket:"amanzi-watch.firebasestorage.app",messagingSenderId:"850179740873",appId:"1:850179740873:web:9ffa4eb1d43c831a8a6918" });
         const db = firebase.firestore();
         let map, userMarker, selectedMarker, userLocation=null, selectedLocation=null;
-        let reports=[], waterMarkers=[], tapMode=false, adCount=0;
+        let reports=[], waterMarkers=[], tapMode=false;
         const today = new Date().toISOString().split('T')[0];
 
         db.collection("reports").orderBy("timestamp","desc").limit(50).onSnapshot(snap=>{reports=[];snap.forEach(doc=>reports.push({id:doc.id,...doc.data()}));updateTimes();renderAll();});
@@ -168,8 +165,24 @@
         function openReportModal(type){document.getElementById('modalTitle').textContent=type==='active'?'💧 Report Water Available':'🚫 Report Dry Area';document.getElementById('reportStatus').value=type==='active'?'active':'inactive';document.getElementById('reportModal').classList.add('active');}
         function closeModal(){document.getElementById('reportModal').classList.remove('active');}
 
-        // ============ INSTANT SUBMIT + AD ONLY AFTER REPORT ============
-        function submitReport(){const loc=document.getElementById('reportLocation').value;const desc=document.getElementById('reportDescription').value;const status=document.getElementById('reportStatus').value;if(!loc)return alert('Please enter a location');closeModal();document.getElementById('reportLocation').value='';document.getElementById('reportDescription').value='';if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}selectedLocation=null;if(tapMode)toggleTapMode();reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});renderAll();showToast('✅ Report saved!');db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});if(adCount<2){setTimeout(()=>{var s=document.createElement('script');s.dataset.zone='11185977';s.src='https://nap5k.com/tag.min.js';s.onload=function(){if(window.monetag)monetag.interstitial?.show();};document.body.appendChild(s);adCount++;},2000);}}
+        // ============ INSTANT SUBMIT — NO ADS ============
+        function submitReport(){
+            const loc=document.getElementById('reportLocation').value;
+            const desc=document.getElementById('reportDescription').value;
+            const status=document.getElementById('reportStatus').value;
+            if(!loc)return alert('Please enter a location');
+            closeModal();
+            document.getElementById('reportLocation').value='';
+            document.getElementById('reportDescription').value='';
+            if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}
+            selectedLocation=null;
+            if(tapMode)toggleTapMode();
+            reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});
+            renderAll();
+            showToast('✅ Report saved!');
+            db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
+        }
+
         function shareApp(){shareToWA(null,`💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`);}
         function shareNearbyWater(){if(!userLocation)return alert('Enable location');shareToWA(null,`📱 https://amanziwatch.github.io/AmanziWatch/`);}
         function shareToWA(id,msg){if(id){const r=reports.find(x=>x.id===id);if(r)msg=`${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.github.io/AmanziWatch/`;}window.open((/Android|iPhone/i.test(navigator.userAgent)?'whatsapp://send?text=':'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');}
