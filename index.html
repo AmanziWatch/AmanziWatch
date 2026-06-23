@@ -102,7 +102,7 @@
     </div>
 
     <div class="bottom-panel">
-        <button class="install-btn-full" onclick="installApp()">📲 Add to Home Screen — Use Like a Real App</button>
+        <button class="install-btn-full" id="installBtn" onclick="installApp()">📲 Add to Home Screen — Use Like a Real App</button>
         <div class="quick-actions">
             <button class="action-btn btn-report" onclick="openReportModal('active')"><span class="icon">💧</span>Water Here</button>
             <button class="action-btn btn-inactive" onclick="openReportModal('inactive')"><span class="icon">🚫</span>Dry Area</button>
@@ -143,8 +143,38 @@
         // ============ PWA ============
         if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
         let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
-        function installApp() { if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;} else if(window.matchMedia('(display-mode: standalone)').matches){showToast('✅ Already installed!');} else {alert(/iPhone|iPad/i.test(navigator.userAgent)?'Tap Share 📤 → Add to Home Screen':'Tap ⋮ → Add to Home Screen');} }
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+        });
+
+        function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((result) => {
+                    if (result.outcome === 'accepted') showToast('✅ Installed!');
+                    deferredPrompt = null;
+                });
+            } else if (window.matchMedia('(display-mode: standalone)').matches) {
+                showToast('✅ Already installed!');
+            } else {
+                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                if (isIOS) {
+                    showToast('📱 Tap Share → Add to Home Screen');
+                } else {
+                    showToast('📱 Tap ⋮ → Install app');
+                    if (!sessionStorage.getItem('reloaded')) {
+                        sessionStorage.setItem('reloaded', '1');
+                        setTimeout(() => location.reload(), 500);
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('appinstalled', () => {
+            showToast('✅ App installed!');
+            deferredPrompt = null;
+        });
 
         // ============ FIREBASE ============
         firebase.initializeApp({ apiKey:"AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",authDomain:"amanzi-watch.firebaseapp.com",projectId:"amanzi-watch",storageBucket:"amanzi-watch.firebasestorage.app",messagingSenderId:"850179740873",appId:"1:850179740873:web:9ffa4eb1d43c831a8a6918" });
@@ -196,6 +226,13 @@
         function selectResult(lat,lng,name){document.getElementById('searchResults').classList.remove('show');document.getElementById('searchBox').value=name;map.setView([lat,lng],15);placePin(lat,lng);document.getElementById('reportLocation').value=name;}
         document.addEventListener('click',e=>{if(!e.target.closest('.search-container'))document.getElementById('searchResults').classList.remove('show');});
         document.getElementById('reportModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+        // Trigger install prompt detection on load
+        window.addEventListener('load', () => {
+            if (deferredPrompt) {
+                document.getElementById('installBtn').textContent = '📲 Install App — One Tap';
+            }
+        });
 
         initMap();
     </script>
