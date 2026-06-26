@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#1a73e8">
     
-    <!-- PWA Meta Tags -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Amanzi Watch">
@@ -34,13 +33,14 @@
         .search-results.show { display: block; }
         .search-result-item { padding: 12px 16px; border-bottom: 1px solid #f0f0f0; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 10px; }
         .search-result-item:active { background: #e3f2fd; }
-        .bottom-panel { background: white; border-top: 1px solid #e0e0e0; padding: 12px 16px 16px; max-height: 40vh; overflow-y: auto; z-index: 1000; }
+        .bottom-panel { background: white; border-top: 1px solid #e0e0e0; padding: 12px 16px 16px; max-height: 50vh; overflow-y: auto; z-index: 1000; }
         .quick-actions { display: flex; gap: 8px; margin-bottom: 12px; }
-        .action-btn { flex: 1; padding: 12px 6px; border: none; border-radius: 12px; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; color: white; }
+        .action-btn { flex: 1; padding: 12px 6px; border: none; border-radius: 12px; font-weight: 700; font-size: 11px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; color: white; }
         .btn-report { background: #4caf50; }
         .btn-inactive { background: #f44336; }
         .btn-nearby { background: #ff9800; }
-        .btn-share { background: #25D366; }
+        .btn-share { background: #128C7E; }
+        .btn-chat { background: #25D366; }
         .action-btn .icon { font-size: 22px; }
         .feed-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
         .live-dot { width: 8px; height: 8px; background: #4caf50; border-radius: 50%; animation: blink 1s infinite; }
@@ -52,6 +52,13 @@
         .status-active { background: #e8f5e9; color: #2e7d32; display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
         .status-inactive { background: #ffebee; color: #c62828; display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
         .share-card-btn { position: absolute; right: 8px; bottom: 8px; background: #25D366; color: white; border: none; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; }
+        .comment-btn { background: #1a73e8; color: white; border: none; padding: 6px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+        .comments-section { margin-top: 8px; border-top: 1px solid #e0e0e0; padding-top: 8px; }
+        .comment-item { background: white; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; font-size: 11px; }
+        .comment-item .comment-time { color: #999; font-size: 10px; }
+        .comment-input-row { display: flex; gap: 6px; margin-top: 6px; }
+        .comment-input { flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 20px; font-size: 12px; font-family: inherit; }
+        .comment-send-btn { background: #1a73e8; color: white; border: none; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer; }
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 2000; align-items: flex-end; justify-content: center; }
         .modal-overlay.active { display: flex; }
         .modal-sheet { background: white; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 24px 20px 32px; animation: slideUp 0.3s ease; }
@@ -102,11 +109,11 @@
     </div>
 
     <div class="bottom-panel">
-        <button class="install-btn-full" id="installBtn" onclick="installApp()">📲 Add to Home Screen — Use Like a Real App</button>
+        <button class="install-btn-full" onclick="installApp()">📲 Add to Home Screen — Use Like a Real App</button>
         <div class="quick-actions">
-            <button class="action-btn btn-report" onclick="openReportModal('active')"><span class="icon">💧</span>Water Here</button>
-            <button class="action-btn btn-inactive" onclick="openReportModal('inactive')"><span class="icon">🚫</span>Dry Area</button>
-            <button class="action-btn btn-nearby" onclick="findNearby()"><span class="icon">📍</span>Near Me</button>
+            <button class="action-btn btn-report" onclick="openReportModal('active')"><span class="icon">💧</span>Water</button>
+            <button class="action-btn btn-inactive" onclick="openReportModal('inactive')"><span class="icon">🚫</span>Dry</button>
+            <button class="action-btn btn-nearby" onclick="findNearby()"><span class="icon">📍</span>Near</button>
             <button class="action-btn btn-share" onclick="shareApp()"><span class="icon">📤</span>Share</button>
         </div>
         <div class="feed-title"><span class="live-dot"></span> Live Reports <span id="reportCount" style="font-weight:400;color:#999;font-size:12px;">-</span></div>
@@ -143,38 +150,8 @@
         // ============ PWA ============
         if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
         let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-        });
-
-        function installApp() {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((result) => {
-                    if (result.outcome === 'accepted') showToast('✅ Installed!');
-                    deferredPrompt = null;
-                });
-            } else if (window.matchMedia('(display-mode: standalone)').matches) {
-                showToast('✅ Already installed!');
-            } else {
-                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-                if (isIOS) {
-                    showToast('📱 Tap Share → Add to Home Screen');
-                } else {
-                    showToast('📱 Tap ⋮ → Install app');
-                    if (!sessionStorage.getItem('reloaded')) {
-                        sessionStorage.setItem('reloaded', '1');
-                        setTimeout(() => location.reload(), 500);
-                    }
-                }
-            }
-        }
-
-        window.addEventListener('appinstalled', () => {
-            showToast('✅ App installed!');
-            deferredPrompt = null;
-        });
+        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
+        function installApp() { if(deferredPrompt){deferredPrompt.prompt();deferredPrompt=null;} else if(window.matchMedia('(display-mode: standalone)').matches){showToast('✅ Already installed!');} else {alert(/iPhone|iPad/i.test(navigator.userAgent)?'Tap Share 📤 → Add to Home Screen':'Tap ⋮ → Add to Home Screen');} }
 
         // ============ FIREBASE ============
         firebase.initializeApp({ apiKey:"AIzaSyD2G4lhXAIahk_T3eqRXcm3c2A4QpCrmbU",authDomain:"amanzi-watch.firebaseapp.com",projectId:"amanzi-watch",storageBucket:"amanzi-watch.firebasestorage.app",messagingSenderId:"850179740873",appId:"1:850179740873:web:9ffa4eb1d43c831a8a6918" });
@@ -186,54 +163,67 @@
         db.collection("reports").orderBy("timestamp","desc").limit(50).onSnapshot(snap=>{reports=[];snap.forEach(doc=>reports.push({id:doc.id,...doc.data()}));updateTimes();renderAll();});
         (async()=>{const key=`visit_${today}`;if(!localStorage.getItem(key)){localStorage.setItem(key,'1');try{await db.collection("stats").doc(today).set({count:firebase.firestore.FieldValue.increment(1)},{merge:true});await db.collection("stats").doc("total").set({count:firebase.firestore.FieldValue.increment(1)},{merge:true});}catch(e){}}db.collection("stats").doc(today).onSnapshot(d=>{if(d.exists)document.getElementById('todayCount').textContent=d.data().count;});db.collection("stats").doc("total").onSnapshot(d=>{if(d.exists)document.getElementById('totalCount').textContent=d.data().count;});})();
         function updateTimes(){reports.forEach(r=>{let ts=r.timestamp;if(ts?.toDate)ts=ts.toDate().getTime();else if(typeof ts==='string')ts=new Date(ts).getTime();else ts=Date.now();const m=Math.floor((Date.now()-ts)/60000);r.time=m<1?'Just now':m<60?`${m}m ago`:m<1440?`${Math.floor(m/60)}h ago`:`${Math.floor(m/1440)}d ago`;});}
-
         function initMap(){map=L.map('map',{center:[-26.2041,28.0473],zoom:11,zoomControl:false});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(map);L.control.zoom({position:'topright'}).addTo(map);map.on('click',e=>{if(tapMode)placePin(e.latlng.lat,e.latlng.lng);});navigator.geolocation?.getCurrentPosition(pos=>{userLocation={lat:pos.coords.latitude,lng:pos.coords.longitude};if(userMarker)map.removeLayer(userMarker);userMarker=L.marker([userLocation.lat,userLocation.lng],{icon:L.divIcon({className:'user-marker',html:'<div style="background:#1a73e8;border:3px solid white;border-radius:50%;width:16px;height:16px;"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup('<b>📍 You are here</b>');},()=>{},{enableHighAccuracy:true});}
         function goHome(){map.setView([-26.2041,28.0473],11);showToast('📍 Johannesburg');}
-        function renderAll(){waterMarkers.forEach(m=>map.removeLayer(m));waterMarkers=[];reports.forEach(r=>{if(!r.lat||!r.lng)return;waterMarkers.push(L.marker([r.lat,r.lng],{icon:L.divIcon({className:r.status==='active'?'water-active':'water-inactive',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));});document.getElementById('reportCount').textContent=`${reports.length} reports`;document.getElementById('reportsFeed').innerHTML=!reports.length?'<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>':[...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button></div>`).join('');}
         function toggleTapMode(){tapMode=!tapMode;document.getElementById('tapPinBtn').classList.toggle('active',tapMode);document.getElementById('tapPinBtn').textContent=tapMode?'👆 Tap Map':'📍 Pin Location';map.getContainer().style.cursor=tapMode?'crosshair':'';if(!tapMode&&selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;selectedLocation=null;}}
         function placePin(lat,lng){if(selectedMarker)map.removeLayer(selectedMarker);selectedLocation={lat,lng};selectedMarker=L.marker([lat,lng],{icon:L.divIcon({className:'water-active',iconSize:[20,20],iconAnchor:[10,10]})}).addTo(map).bindPopup('<b>📍 Report here</b>').openPopup();openReportModal('active');}
         function openReportModal(type){document.getElementById('modalTitle').textContent=type==='active'?'💧 Report Water Available':'🚫 Report Dry Area';document.getElementById('reportStatus').value=type==='active'?'active':'inactive';document.getElementById('reportModal').classList.add('active');}
         function closeModal(){document.getElementById('reportModal').classList.remove('active');}
 
-        // ============ INSTANT SUBMIT — NO ADS ============
-        function submitReport(){
-            const loc=document.getElementById('reportLocation').value;
-            const desc=document.getElementById('reportDescription').value;
-            const status=document.getElementById('reportStatus').value;
-            if(!loc)return alert('Please enter a location');
-            closeModal();
-            document.getElementById('reportLocation').value='';
-            document.getElementById('reportDescription').value='';
-            if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}
-            selectedLocation=null;
-            if(tapMode)toggleTapMode();
-            reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});
-            renderAll();
-            showToast('✅ Report saved!');
-            db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});
+        // ============ SUBMIT REPORT ============
+        function submitReport(){const loc=document.getElementById('reportLocation').value;const desc=document.getElementById('reportDescription').value;const status=document.getElementById('reportStatus').value;if(!loc)return alert('Please enter a location');closeModal();document.getElementById('reportLocation').value='';document.getElementById('reportDescription').value='';if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}selectedLocation=null;if(tapMode)toggleTapMode();reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});renderAll();showToast('✅ Report saved!');db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});}
+
+        // ============ COMMENTS SYSTEM ============
+        function toggleComments(reportId) {
+            const section = document.getElementById('comments-' + reportId);
+            if (section.style.display === 'none' || !section.style.display) {
+                section.style.display = 'block';
+                loadComments(reportId);
+            } else {
+                section.style.display = 'none';
+            }
         }
+
+        function loadComments(reportId) {
+            db.collection("reports").doc(reportId).collection("comments").orderBy("timestamp","asc").onSnapshot(snap => {
+                const container = document.getElementById('comments-list-' + reportId);
+                container.innerHTML = snap.empty ? '<div style="font-size:10px;color:#999;padding:4px;">No comments yet</div>' : '';
+                snap.forEach(doc => {
+                    const c = doc.data();
+                    const time = c.timestamp?.toDate ? Math.floor((Date.now()-c.timestamp.toDate().getTime())/60000) : 0;
+                    const timeStr = time < 1 ? 'Just now' : time < 60 ? `${time}m ago` : `${Math.floor(time/60)}h ago`;
+                    container.innerHTML += `<div class="comment-item"><strong>👤 Anon</strong> <span class="comment-time">${timeStr}</span><br>${c.text}</div>`;
+                });
+                container.scrollTop = container.scrollHeight;
+            });
+        }
+
+        function addComment(reportId) {
+            const input = document.getElementById('comment-input-' + reportId);
+            const text = input.value.trim();
+            if (!text) return;
+            db.collection("reports").doc(reportId).collection("comments").add({
+                text: text,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            input.value = '';
+        }
+
+        // ============ RENDER ============
+        function renderAll(){waterMarkers.forEach(m=>map.removeLayer(m));waterMarkers=[];reports.forEach(r=>{if(!r.lat||!r.lng)return;waterMarkers.push(L.marker([r.lat,r.lng],{icon:L.divIcon({className:r.status==='active'?'water-active':'water-inactive',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));});document.getElementById('reportCount').textContent=`${reports.length} reports`;const feed=document.getElementById('reportsFeed');feed.innerHTML=!reports.length?'<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>':[...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>{const rid=r.id&&r.id.startsWith('local-')?'':r.id;return`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button><button class="comment-btn" onclick="event.stopPropagation();toggleComments('${r.id}')">💬 Comments</button><div class="comments-section" id="comments-${r.id}" style="display:none;"><div id="comments-list-${r.id}"></div><div class="comment-input-row"><input class="comment-input" id="comment-input-${r.id}" placeholder="Add a comment..."><button class="comment-send-btn" onclick="addComment('${r.id}')">Send</button></div></div></div>`;}).join('');}
 
         function shareApp(){shareToWA(null,`💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`);}
         function shareNearbyWater(){if(!userLocation)return alert('Enable location');shareToWA(null,`📱 https://amanziwatch.github.io/AmanziWatch/`);}
         function shareToWA(id,msg){if(id){const r=reports.find(x=>x.id===id);if(r)msg=`${r.status==='active'?'💧':'🚫'} *${r.location}*\n${r.description}\n\n📱 https://amanziwatch.github.io/AmanziWatch/`;}window.open((/Android|iPhone/i.test(navigator.userAgent)?'whatsapp://send?text=':'https://wa.me/?text=')+encodeURIComponent(msg),'_blank');}
         function findNearby(){if(!userLocation)return alert('Enable location');map.setView([userLocation.lat,userLocation.lng],14);}
 
-        // ============ INSTANT OFFLINE SEARCH ============
-        const JOBURG_AREAS=['Soweto','Alexandra','Lenasia','Orange Farm','Northriding','Randburg','Bryanston','Sandton','Midrand','Diepsloot','Roodepoort','Krugersdorp','Edenvale','Bedfordview','Boskruin','Honeydew','Fourways','Cosmo City','Ennerdale','Finetown','Lawley','Poortjie','Protea Glen','Dobsonville','Meadowlands','Orlando','Diepkloof','Pimville','Zola','Emdeni','Eldorado Park','Devland','Kliptown','Ivory Park','Tembisa','Olivenhoutbosch','Eikenhof','Crosby','Melville','Auckland Park','Greenside','Parkhurst','Rosebank','Hyde Park','Linmeyer','Linksfield','Whiteridge','Bram Fischer'];
-        const AREA_COORDS={Soweto:[-26.2485,27.854],Alexandra:[-26.1057,28.052],Lenasia:[-26.332,27.846],'Orange Farm':[-26.465,27.867],Northriding:[-26.105,27.955],Randburg:[-26.0948,28.0085],Bryanston:[-26.053,28.02],Diepsloot:[-25.935,28.01],Roodepoort:[-26.1625,27.8725],Midrand:[-25.999,28.126],Ennerdale:[-26.48,27.85],Boskruin:[-26.09,27.95],Sandton:[-26.1,28.05],Fourways:[-26.01,28.0],'Cosmo City':[-25.98,27.93],'Protea Glen':[-26.28,27.82],Dobsonville:[-26.23,27.86],'Eldorado Park':[-26.3,27.89],'Ivory Park':[-26.0,28.15],Tembisa:[-26.0,28.2],Eikenhof:[-26.35,27.92],Linmeyer:[-26.26,28.1],Linksfield:[-26.16,28.1],Whiteridge:[-26.07,27.95]};
-
-        document.getElementById('searchBox').addEventListener('input',function(){const q=this.value.toLowerCase().trim();if(q.length<1){document.getElementById('searchResults').classList.remove('show');return;}const matches=JOBURG_AREAS.filter(a=>a.toLowerCase().includes(q)).slice(0,5);const rc=document.getElementById('searchResults');if(matches.length>0){rc.innerHTML=matches.map(a=>{const c=AREA_COORDS[a]||[-26.2041,28.0473];return`<div class="search-result-item" onclick="selectResult(${c[0]},${c[1]},'${a}')"><span>📍</span><div><strong>${a}</strong><br><small>Johannesburg</small></div></div>`;}).join('');rc.classList.add('show');return;}fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.value+', Johannesburg')}&limit=3&countrycodes=za`).then(r=>r.json()).then(d=>{rc.innerHTML=d.length?d.map(p=>`<div class="search-result-item" onclick="selectResult(${p.lat},${p.lon},'${p.display_name.split(',')[0]}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong></div></div>`).join(''):'<div style="padding:12px;color:#999;">No results — try a nearby area</div>';rc.classList.add('show');}).catch(()=>{rc.innerHTML='<div style="padding:12px;color:#999;">Type an area name</div>';rc.classList.add('show');});});
+        // ============ SEARCH ============
+        const JOBURG_AREAS=['Soweto','Alexandra','Lenasia','Orange Farm','Northriding','Randburg','Bryanston','Sandton','Midrand','Diepsloot','Roodepoort','Krugersdorp','Edenvale','Bedfordview','Boskruin','Honeydew','Fourways','Cosmo City','Ennerdale','Finetown','Lawley','Poortjie','Protea Glen','Dobsonville','Meadowlands','Orlando','Diepkloof','Pimville','Zola','Emdeni','Eldorado Park','Devland','Kliptown','Ivory Park','Tembisa','Olivenhoutbosch','Eikenhof','Crosby','Melville','Auckland Park','Greenside','Parkhurst','Rosebank','Hyde Park','Linmeyer','Linksfield','Whiteridge','Bram Fischer','Thembelihle'];
+        const AREA_COORDS={Soweto:[-26.2485,27.854],Alexandra:[-26.1057,28.052],Lenasia:[-26.332,27.846],'Orange Farm':[-26.465,27.867],Northriding:[-26.105,27.955],Randburg:[-26.0948,28.0085],Bryanston:[-26.053,28.02],Diepsloot:[-25.935,28.01],Roodepoort:[-26.1625,27.8725],Midrand:[-25.999,28.126],Ennerdale:[-26.48,27.85],Boskruin:[-26.09,27.95],Sandton:[-26.1,28.05],Fourways:[-26.01,28.0],'Cosmo City':[-25.98,27.93],'Protea Glen':[-26.28,27.82],Dobsonville:[-26.23,27.86],'Eldorado Park':[-26.3,27.89],'Ivory Park':[-26.0,28.15],Tembisa:[-26.0,28.2],Eikenhof:[-26.35,27.92],Linmeyer:[-26.26,28.1],Linksfield:[-26.16,28.1],Whiteridge:[-26.07,27.95],Thembelihle:[-26.35,27.9]};
+        document.getElementById('searchBox').addEventListener('input',function(){const q=this.value.toLowerCase().trim();if(q.length<1){document.getElementById('searchResults').classList.remove('show');return;}const matches=JOBURG_AREAS.filter(a=>a.toLowerCase().includes(q)).slice(0,5);const rc=document.getElementById('searchResults');if(matches.length>0){rc.innerHTML=matches.map(a=>{const c=AREA_COORDS[a]||[-26.2041,28.0473];return`<div class="search-result-item" onclick="selectResult(${c[0]},${c[1]},'${a}')"><span>📍</span><div><strong>${a}</strong><br><small>Johannesburg</small></div></div>`;}).join('');rc.classList.add('show');return;}fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(this.value+', Johannesburg')}&limit=3&countrycodes=za`).then(r=>r.json()).then(d=>{rc.innerHTML=d.length?d.map(p=>`<div class="search-result-item" onclick="selectResult(${p.lat},${p.lon},'${p.display_name.split(',')[0]}')"><span>📍</span><div><strong>${p.display_name.split(',')[0]}</strong></div></div>`).join(''):'<div style="padding:12px;color:#999;">No results</div>';rc.classList.add('show');}).catch(()=>{rc.innerHTML='<div style="padding:12px;color:#999;">Type an area name</div>';rc.classList.add('show');});});
         function selectResult(lat,lng,name){document.getElementById('searchResults').classList.remove('show');document.getElementById('searchBox').value=name;map.setView([lat,lng],15);placePin(lat,lng);document.getElementById('reportLocation').value=name;}
         document.addEventListener('click',e=>{if(!e.target.closest('.search-container'))document.getElementById('searchResults').classList.remove('show');});
         document.getElementById('reportModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
-
-        // Trigger install prompt detection on load
-        window.addEventListener('load', () => {
-            if (deferredPrompt) {
-                document.getElementById('installBtn').textContent = '📲 Install App — One Tap';
-            }
-        });
-
         initMap();
     </script>
 </body>
