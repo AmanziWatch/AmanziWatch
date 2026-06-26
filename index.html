@@ -40,7 +40,6 @@
         .btn-inactive { background: #f44336; }
         .btn-nearby { background: #ff9800; }
         .btn-share { background: #128C7E; }
-        .btn-chat { background: #25D366; }
         .action-btn .icon { font-size: 22px; }
         .feed-title { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
         .live-dot { width: 8px; height: 8px; background: #4caf50; border-radius: 50%; animation: blink 1s infinite; }
@@ -170,12 +169,31 @@
         function openReportModal(type){document.getElementById('modalTitle').textContent=type==='active'?'💧 Report Water Available':'🚫 Report Dry Area';document.getElementById('reportStatus').value=type==='active'?'active':'inactive';document.getElementById('reportModal').classList.add('active');}
         function closeModal(){document.getElementById('reportModal').classList.remove('active');}
 
-        // ============ SUBMIT REPORT ============
-        function submitReport(){const loc=document.getElementById('reportLocation').value;const desc=document.getElementById('reportDescription').value;const status=document.getElementById('reportStatus').value;if(!loc)return alert('Please enter a location');closeModal();document.getElementById('reportLocation').value='';document.getElementById('reportDescription').value='';if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}selectedLocation=null;if(tapMode)toggleTapMode();reports.unshift({id:'local-'+Date.now(),location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,time:'Just now',timestamp:{toDate:()=>new Date()}});renderAll();showToast('✅ Report saved!');db.collection("reports").add({location:loc,description:desc||'',status,lat:selectedLocation?.lat||userLocation?.lat||-26.2041,lng:selectedLocation?.lng||userLocation?.lng||28.0473,timestamp:firebase.firestore.FieldValue.serverTimestamp()}).catch(()=>{});}
+        // ============ SUBMIT REPORT (SAVES TO FIREBASE FIRST) ============
+        async function submitReport(){
+            const loc=document.getElementById('reportLocation').value;
+            const desc=document.getElementById('reportDescription').value;
+            const status=document.getElementById('reportStatus').value;
+            if(!loc)return alert('Please enter a location');
+            closeModal();
+            document.getElementById('reportLocation').value='';
+            document.getElementById('reportDescription').value='';
+            if(selectedMarker){map.removeLayer(selectedMarker);selectedMarker=null;}
+            selectedLocation=null;
+            if(tapMode)toggleTapMode();
+            showToast('✅ Report saved!');
+            await db.collection("reports").add({
+                location:loc,description:desc||'',status,
+                lat:selectedLocation?.lat||userLocation?.lat||-26.2041,
+                lng:selectedLocation?.lng||userLocation?.lng||28.0473,
+                timestamp:firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
 
         // ============ COMMENTS SYSTEM ============
         function toggleComments(reportId) {
             const section = document.getElementById('comments-' + reportId);
+            if (!section) return;
             if (section.style.display === 'none' || !section.style.display) {
                 section.style.display = 'block';
                 loadComments(reportId);
@@ -187,6 +205,7 @@
         function loadComments(reportId) {
             db.collection("reports").doc(reportId).collection("comments").orderBy("timestamp","asc").onSnapshot(snap => {
                 const container = document.getElementById('comments-list-' + reportId);
+                if (!container) return;
                 container.innerHTML = snap.empty ? '<div style="font-size:10px;color:#999;padding:4px;">No comments yet</div>' : '';
                 snap.forEach(doc => {
                     const c = doc.data();
@@ -200,6 +219,7 @@
 
         function addComment(reportId) {
             const input = document.getElementById('comment-input-' + reportId);
+            if (!input) return;
             const text = input.value.trim();
             if (!text) return;
             db.collection("reports").doc(reportId).collection("comments").add({
@@ -210,7 +230,13 @@
         }
 
         // ============ RENDER ============
-        function renderAll(){waterMarkers.forEach(m=>map.removeLayer(m));waterMarkers=[];reports.forEach(r=>{if(!r.lat||!r.lng)return;waterMarkers.push(L.marker([r.lat,r.lng],{icon:L.divIcon({className:r.status==='active'?'water-active':'water-inactive',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));});document.getElementById('reportCount').textContent=`${reports.length} reports`;const feed=document.getElementById('reportsFeed');feed.innerHTML=!reports.length?'<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>':[...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>{const rid=r.id&&r.id.startsWith('local-')?'':r.id;return`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button><button class="comment-btn" onclick="event.stopPropagation();toggleComments('${r.id}')">💬 Comments</button><div class="comments-section" id="comments-${r.id}" style="display:none;"><div id="comments-list-${r.id}"></div><div class="comment-input-row"><input class="comment-input" id="comment-input-${r.id}" placeholder="Add a comment..."><button class="comment-send-btn" onclick="addComment('${r.id}')">Send</button></div></div></div>`;}).join('');}
+        function renderAll(){
+            waterMarkers.forEach(m=>map.removeLayer(m));waterMarkers=[];
+            reports.forEach(r=>{if(!r.lat||!r.lng)return;waterMarkers.push(L.marker([r.lat,r.lng],{icon:L.divIcon({className:r.status==='active'?'water-active':'water-inactive',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map).bindPopup(`<div style="font-family:sans-serif;min-width:180px;"><b>${r.location}</b><br><small>${r.time}</small><br><span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600;color:${r.status==='active'?'#2e7d32':'#c62828'};background:${r.status==='active'?'#e8f5e9':'#ffebee'};">${r.status==='active'?'✅ Active':'🚫 Dry'}</span><p style="margin-top:3px;font-size:11px;">${r.description||''}</p></div>`));});
+            document.getElementById('reportCount').textContent=`${reports.length} reports`;
+            const feed=document.getElementById('reportsFeed');
+            feed.innerHTML=!reports.length?'<div style="text-align:center;padding:25px;color:#999;"><div style="font-size:40px;">🗺️</div><h3>No reports yet</h3><p>Be the first!</p></div>':[...reports].sort((a,b)=>(b.timestamp?.toDate?.()||0)-(a.timestamp?.toDate?.()||0)).slice(0,10).map(r=>`<div class="report-card"><div><span class="location">📍 ${r.location}</span> <span class="time">${r.time}</span></div><p class="description">${r.description||''}</p><span class="${r.status==='active'?'status-active':'status-inactive'}">${r.status==='active'?'✅ Available':'🚫 Dry'}</span><button class="share-card-btn" onclick="event.stopPropagation();shareToWA('${r.id}')">📤</button><button class="comment-btn" onclick="event.stopPropagation();toggleComments('${r.id}')">💬 Comments</button><div class="comments-section" id="comments-${r.id}" style="display:none;"><div id="comments-list-${r.id}"></div><div class="comment-input-row"><input class="comment-input" id="comment-input-${r.id}" placeholder="Add a comment..."><button class="comment-send-btn" onclick="addComment('${r.id}')">Send</button></div></div></div>`).join('');
+        }
 
         function shareApp(){shareToWA(null,`💧 *Amanzi Watch - Joburg Water Tracker*\n\nFind water tankers near you.\n\n📱 https://amanziwatch.github.io/AmanziWatch/\n\n*Free. No download.*`);}
         function shareNearbyWater(){if(!userLocation)return alert('Enable location');shareToWA(null,`📱 https://amanziwatch.github.io/AmanziWatch/`);}
